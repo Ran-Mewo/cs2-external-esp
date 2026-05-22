@@ -16,6 +16,7 @@ public:
 
     Vec3_t pos;
     float view_offset_z{};
+    Vec3_t eye_angles;
     Vec3_t vel;
 
     int ping = 0;

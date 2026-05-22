@@ -11,6 +11,7 @@ namespace cfg {
 		inline bool health = true;
 		inline bool skeleton = true;
 		inline bool head_tracker = true;
+		inline bool head_tracker_eye_line = true;
 		inline bool health_number = false;
 
 		inline bool tracers = false;
@@ -19,6 +20,7 @@ namespace cfg {
 			inline bool box = true;
 			inline bool skeleton = false;
 			inline bool head_tracker = false;
+			inline bool head_tracker_eye_line = false;
 
 			namespace colors {
 				inline color_t box_team{ 1.f, 1.f, 0.f, 0.8f };
@@ -27,6 +29,8 @@ namespace cfg {
 				inline color_t skeleton_enemy{ 0.f, 1.f, 1.f, 0.8f };
 				inline color_t tracker_team{ 1.f, 1.f, 0.f, 0.5f };
 				inline color_t tracker_enemy{ 0.f, 1.f, 1.f, 0.5f };
+				inline color_t eye_line_team{ 1.f, 0.5f, 0.f, 0.8f };
+				inline color_t eye_line_enemy{ 1.f, 0.2f, 0.2f, 0.8f };
 			}
 		}
 
@@ -51,6 +55,9 @@ namespace cfg {
 
 			inline color_t tracker_team{ 1.f, 1.f, 1.f, 0.3f };
 			inline color_t tracker_enemy{ 1.f, 1.f, 1.f, 0.3f };
+
+			inline color_t eye_line_team{ 1.f, 0.5f, 0.f, 0.8f };
+			inline color_t eye_line_enemy{ 1.f, 0.2f, 0.2f, 0.8f };
 
 			inline color_t tracer_team{ 0.f, 1.f, 0.f, 0.5f };
 			inline color_t tracer_enemy{ 1.f, 0.f, 0.f, 0.5f };

@@ -236,6 +236,15 @@ public:
 		};
 	}
 
+	static Vec3_t FromAngle(const Vec3_t& ang) noexcept {
+		const float r = std::numbers::pi_v<float> / 180.f;
+		const float cp = std::cos(ang.x * r);
+		const float sp = std::sin(ang.x * r);
+		const float cy = std::cos(ang.y * r);
+		const float sy = std::sin(ang.y * r);
+		return { cp * cy, cp * sy, -sp };
+	}
+
 	__forceinline float normalize() {
 		float len = length();
 

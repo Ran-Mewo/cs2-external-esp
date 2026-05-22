@@ -103,6 +103,7 @@ bool Player::UpdatePawn() {
 
 	this->pos = p->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin);
 	this->view_offset_z = p->read<float>(pawn + offsets::pawn::m_vecViewOffsetZ);
+	this->eye_angles = p->read<Vec3_t>(pawn + offsets::pawn::m_angEyeAngles);
 
 	if (this->pos.zero())
 		return false;

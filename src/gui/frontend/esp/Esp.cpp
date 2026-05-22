@@ -42,7 +42,7 @@ void Esp::RenderImpl() {
 
 	RenderBomb(local, bomb);
 
-	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker;
+	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
 	const Vec3_t eye = local.pos + Vec3_t(0.f, 0.f, local.view_offset_z);
 	const bool visReady = any_spotted && VisCheckManager::IsReady();
 	static uint8_t visHold[64]{};
@@ -117,7 +117,7 @@ void Esp::RenderPlayer(Player player, bool mate, bool visible) {
 	if (cfg::esp::skeleton || (visible && cfg::esp::spotted::skeleton))
 		RenderPlayerBones(player, mate, visible);
 
-	if (cfg::esp::head_tracker || (visible && cfg::esp::spotted::head_tracker))
+	if (cfg::esp::head_tracker || cfg::esp::head_tracker_eye_line || (visible && (cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line)))
 		RenderPlayerTracker(player, bounds, mate, visible);
 
 	RenderPlayerBars(player, bounds);
@@ -167,16 +167,36 @@ void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, b
 		return;
 
 	auto width = bounds.second.x - bounds.first.x;
-	auto color = mate ? cfg::esp::colors::tracker_team : cfg::esp::colors::tracker_enemy;
-	if (visible && cfg::esp::spotted::head_tracker)
-		color = mate ? cfg::esp::spotted::colors::tracker_team : cfg::esp::spotted::colors::tracker_enemy;
 
-	d->AddCircle(
-		head,
-		width / 6,
-		ImColor(color),
-		15
-	);
+	if (cfg::esp::head_tracker || (visible && cfg::esp::spotted::head_tracker)) {
+		auto color = mate ? cfg::esp::colors::tracker_team : cfg::esp::colors::tracker_enemy;
+		if (visible && cfg::esp::spotted::head_tracker)
+			color = mate ? cfg::esp::spotted::colors::tracker_team : cfg::esp::spotted::colors::tracker_enemy;
+
+		d->AddCircle(
+			head,
+			width / 6,
+			ImColor(color),
+			15
+		);
+	}
+
+	if (cfg::esp::head_tracker_eye_line || (visible && cfg::esp::spotted::head_tracker_eye_line)) {
+		Vec2_t eye_line_end;
+		if (!matrix.wts(head_bone.pos + Vec3_t::FromAngle(player.eye_angles) * 40.f, io.DisplaySize, eye_line_end))
+			return;
+
+		auto color = mate ? cfg::esp::colors::eye_line_team : cfg::esp::colors::eye_line_enemy;
+		if (visible && cfg::esp::spotted::head_tracker_eye_line)
+			color = mate ? cfg::esp::spotted::colors::eye_line_team : cfg::esp::spotted::colors::eye_line_enemy;
+
+		d->AddLine(
+			head,
+			eye_line_end,
+			ImColor(color),
+			1.5f
+		);
+	}
 }
 
 void Esp::RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds) {

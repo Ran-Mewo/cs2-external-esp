@@ -132,6 +132,16 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team head tracker color", cfg::esp::colors::tracker_team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy head tracker color", cfg::esp::colors::tracker_enemy.data(), color_flags);
+
+							ImGui::Checkbox("Look Direction", &cfg::esp::head_tracker_eye_line);
+							ImGui::BeginDisabled(!cfg::esp::head_tracker_eye_line);
+							{
+								ImGui::SameLine();
+								ImGui::ColorEdit4("Team look color", cfg::esp::colors::eye_line_team.data(), color_flags);
+								ImGui::SameLine();
+								ImGui::ColorEdit4("Enemy look color", cfg::esp::colors::eye_line_enemy.data(), color_flags);
+							}
+							ImGui::EndDisabled();
 						}
 						ImGui::EndDisabled();
 
@@ -193,6 +203,16 @@ void Menu::RenderImpl() {
 							ImGui::ColorEdit4("Team spotted tracker", cfg::esp::spotted::colors::tracker_team.data(), color_flags);
 							ImGui::SameLine();
 							ImGui::ColorEdit4("Enemy spotted tracker", cfg::esp::spotted::colors::tracker_enemy.data(), color_flags);
+						}
+						ImGui::EndDisabled();
+
+						ImGui::Checkbox("Look Direction", &cfg::esp::spotted::head_tracker_eye_line);
+						ImGui::BeginDisabled(!cfg::esp::spotted::head_tracker_eye_line);
+						{
+							ImGui::SameLine();
+							ImGui::ColorEdit4("Team spotted look", cfg::esp::spotted::colors::eye_line_team.data(), color_flags);
+							ImGui::SameLine();
+							ImGui::ColorEdit4("Enemy spotted look", cfg::esp::spotted::colors::eye_line_enemy.data(), color_flags);
 						}
 						ImGui::EndDisabled();
 
