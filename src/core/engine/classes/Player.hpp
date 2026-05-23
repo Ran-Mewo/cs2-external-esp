@@ -32,6 +32,9 @@ public:
     bool defusing = false;
     bool localplayer = false;
 
+    int32_t crosshair_ent_index = -1;
+    uintptr_t pawn_addr = 0;
+
     char name[32];
     //std::string name;
     uint64_t steam_id{};

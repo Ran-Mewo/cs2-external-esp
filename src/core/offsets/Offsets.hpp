@@ -26,6 +26,7 @@ namespace offsets
 		constexpr std::ptrdiff_t m_iHealth = 0x34C; // int32
 		constexpr std::ptrdiff_t m_iTeamNum = 0x3EB; // uint8
 		constexpr std::ptrdiff_t m_bIsScoped = 0x1C50; // bool
+		constexpr std::ptrdiff_t m_iIDEntIndex = 0x33FC; // CEntityIndex - C_CSPlayerPawn
 		constexpr std::ptrdiff_t m_angEyeAngles = 0x3320; // QAngle - C_CSPlayerPawn
 		constexpr std::ptrdiff_t m_ArmorValue = 0x1C7C; // int32
 		constexpr std::ptrdiff_t m_bIsDefusing = 0x1C52; // bool

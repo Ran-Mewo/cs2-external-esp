@@ -50,7 +50,7 @@
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
     <PlatformToolset>v143</PlatformToolset>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -84,6 +84,8 @@
     <LibraryPath>$(SolutionDir)build\sourcepp\Release;$(SolutionDir)build\sourcepp\_deps\minizip-ng-build\Release;$(SolutionDir)build\sourcepp\_deps\zstd-build\lib\Release;$(SolutionDir)build\sourcepp\_deps\zlib-build\Release;$(SolutionDir)build\sourcepp\_deps\liblzma-build\Release;$(SolutionDir)build\sourcepp\_deps\miniz-build\Release;$(SolutionDir)build\sourcepp\_deps\libtomcrypt-build\Release;$(SolutionDir)build\sourcepp\_deps\libtommath-build\Release;$(SolutionDir)src\external\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <CLToolExe>clang-cl.exe</CLToolExe>
+    <CLToolPath>C:\Program Files\LLVM\bin\</CLToolPath>
     <IncludePath>$(SolutionDir)src\;$(SolutionDir)src\external;$(SolutionDir)src\external\imgui;$(SolutionDir)src\external\json\include;$(SolutionDir)src\external\curl\include;$(SolutionDir)src\external\AsyncLogger\src;$(SolutionDir)src\external\AsyncLogger\include\AsyncLogger;$(SolutionDir)src\external\sourcepp\include;$(SolutionDir)src\external\sourcepp\ext\half\include;$(SolutionDir)build\sourcepp\_deps\tsl_hat_trie-src\include;$(SolutionDir)build\sourcepp\src\sourcepp\parser\include;$(SolutionDir)build\sourcepp\src\sourcepp\compression\include;$(SolutionDir)build\sourcepp\src\sourcepp\crypto\include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)build\sourcepp\Release;$(SolutionDir)build\sourcepp\_deps\minizip-ng-build\Release;$(SolutionDir)build\sourcepp\_deps\zstd-build\lib\Release;$(SolutionDir)build\sourcepp\_deps\zlib-build\Release;$(SolutionDir)build\sourcepp\_deps\liblzma-build\Release;$(SolutionDir)build\sourcepp\_deps\miniz-build\Release;$(SolutionDir)build\sourcepp\_deps\libtomcrypt-build\Release;$(SolutionDir)build\sourcepp\_deps\libtommath-build\Release;$(SolutionDir)src\external\lib;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
@@ -177,6 +179,8 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>common.hpp</PrecompiledHeaderFile>
       <ForcedIncludeFiles>common.hpp</ForcedIncludeFiles>
+      <Optimization>Disabled</Optimization>
+      <AdditionalOptions>/clang:-O3 /clang:-march=native %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -195,6 +199,7 @@
     </ClCompile>
     <ClCompile Include="config\Config.cpp" />
     <ClCompile Include="core\engine\cache\Cache.cpp" />
+    <ClCompile Include="core\features\Triggerbot.cpp" />
     <ClCompile Include="core\engine\classes\Bomb.cpp" />
     <ClCompile Include="core\engine\classes\ObserverServices.cpp" />
     <ClCompile Include="core\engine\Engine.cpp" />
@@ -236,6 +241,7 @@
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\Current.hpp" />
     <ClInclude Include="core\engine\cache\Cache.hpp" />
+    <ClInclude Include="core\features\Triggerbot.hpp" />
     <ClInclude Include="core\engine\classes\Bomb.hpp" />
     <ClInclude Include="core\engine\types\Weapons.hpp" />
     <ClInclude Include="core\engine\classes\ObserverServices.hpp" />

@@ -59,6 +59,7 @@ bool Player::GetPawn() {
 		return false;
 
 	this->pawn = p->read<uintptr_t>(entity_pawn_list_entry + 0x70 * (entity_pawn_address & 0x1FF)); /*0x78*/
+	this->pawn_addr = this->pawn;
 
 	return this->pawn != 0;
 }
@@ -116,6 +117,9 @@ bool Player::UpdatePawn() {
 	this->defusing = p->read<bool>(pawn + offsets::pawn::m_bIsDefusing);
 	this->flashed = p->read<float>(pawn + offsets::pawn::m_flFlashOverlayAlpha) > 0;
 	this->scoped = p->read<bool>(pawn + offsets::pawn::m_bIsScoped);
+
+	if (localplayer)
+		crosshair_ent_index = p->read<int32_t>(pawn + offsets::pawn::m_iIDEntIndex);
 
 	if (!UpdateSkeleton()) {
 		LOGF(FATAL, "Failed to update skeleton");

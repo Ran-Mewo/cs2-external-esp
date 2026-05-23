@@ -115,7 +115,9 @@ bool Config::ReadImpl() {
 		cfg::settings::streamproof = data["utils"].value("streamproof", false);
 		cfg::settings::vsync = data["utils"].value("vsync", true);
 		cfg::settings::free_cpu = data["utils"].value("free_cpu", true);
-		//cfg::settings::open_menu_key = data["utils"].value("open_menu_key", 0);
+
+		if (data.contains("triggerbot"))
+			cfg::triggerbot::enabled = data["triggerbot"].value("enabled", false);
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -211,7 +213,8 @@ bool Config::WriteImpl() {
 	data["utils"]["streamproof"] = cfg::settings::streamproof;
 	data["utils"]["vsync"] = cfg::settings::vsync;
 	data["utils"]["free_cpu"] = cfg::settings::free_cpu;
-	//data["utils"]["open_menu_key"] = cfg::settings::open_menu_key;
+
+	data["triggerbot"]["enabled"] = cfg::triggerbot::enabled;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

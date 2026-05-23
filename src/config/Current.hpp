@@ -94,6 +94,10 @@ namespace cfg {
 		}
 	}
 
+	namespace triggerbot {
+		inline bool enabled = false;
+	}
+
 	namespace settings {
 		inline bool watermark = true;
 		inline bool streamproof = false;

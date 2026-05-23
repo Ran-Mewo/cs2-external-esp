@@ -254,6 +254,15 @@ void Menu::RenderImpl() {
 				}
 				else if (active_tab == Tab::WORLD)
 				{
+					ImGui::Spacing();
+
+					ImGui::Text("Triggerbot");
+					ImGui::Separator();
+					ImGui::Checkbox("Enable##triggerbot", &cfg::triggerbot::enabled);
+					ImGui::SetItemTooltip("Hold a side mouse button (Mouse 4 or 5).");
+
+					ImGui::Spacing();
+
 					ImGui::Text("Bomb");
 					
 					ImGui::Separator();
@@ -266,7 +275,7 @@ void Menu::RenderImpl() {
 					ImGui::Text("Spectator list");
 					ImGui::Separator();
 
-					ImGui::Checkbox("Enable", &cfg::world::spectators::enabled);
+					ImGui::Checkbox("Enable##spectators", &cfg::world::spectators::enabled);
 					if (cfg::world::spectators::enabled) {
 						ImGui::Checkbox("Detailed", &cfg::world::spectators::detailed);
 						ImGui::Checkbox("Only Self", &cfg::world::spectators::self_only);
