@@ -6,7 +6,7 @@
 #include <random>
 
 namespace {
-	constexpr auto kMissGrace = 100ms;
+	constexpr auto kDropTarget = 320ms;
 
 	bool SideButtonHeld() {
 		return (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) || (GetAsyncKeyState(VK_XBUTTON2) & 0x8000);
@@ -75,7 +75,7 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	auto lose_target = [&] {
 		if (miss_since == steady_clock::time_point{})
 			miss_since = now;
-		if (now - miss_since < kMissGrace)
+		if (now - miss_since < kDropTarget)
 			return;
 		reset();
 	};
@@ -103,14 +103,14 @@ void Triggerbot::Tick(const Snapshot& snap) {
 
 	if (locked_ent != ent_index) {
 		locked_ent = ent_index;
-		ready_at = now + milliseconds(RandMs(45, 110));
+		ready_at = now + milliseconds(RandMs(38, 122));
 	}
 
 	if (now < ready_at || now < next_shot)
 		return;
 
 	MouseClick();
-	next_shot = now + milliseconds(RandMs(80, 210));
+	next_shot = now + milliseconds(RandMs(100, 220));
 }
 
 bool Triggerbot::IsHeld() {
