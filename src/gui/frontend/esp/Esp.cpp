@@ -7,8 +7,8 @@ bool Esp::Init() {
 	return GetInstance().InitImpl();
 }
 
-void Esp::Render() {
-    return GetInstance().RenderImpl();
+void Esp::Render(const Snapshot& snapshot) {
+    return GetInstance().RenderImpl(snapshot);
 }
 
 bool Esp::InitImpl() {
@@ -22,15 +22,13 @@ bool Esp::InitImpl() {
 	return true;
 }
 
-void Esp::RenderImpl() {
+void Esp::RenderImpl(const Snapshot& snapshot) {
 	if (!cfg::enabled)
 		return;
 
-	auto snapshot = Cache::CopySnapshot();
 	auto& game = snapshot.game;
 	auto& bomb = snapshot.bomb;
 	auto& local = snapshot.local;
-	auto& globals = snapshot.globals;
 	auto& players = snapshot.players;
 	
 	ImGui::PushFont(this->font);
@@ -91,7 +89,7 @@ void Esp::RenderImpl() {
 	ImGui::PopFont();
 }
 
-void Esp::RenderPlayer(Player player, bool mate, bool visible) {
+void Esp::RenderPlayer(const Player& player, bool mate, bool visible) {
 	// Needed for flags & item sizing, so even if the box is not enabled
 	// Should be calculated
 	std::pair<Vec2_t, Vec2_t> bounds;
@@ -124,7 +122,7 @@ void Esp::RenderPlayer(Player player, bool mate, bool visible) {
 	RenderPlayerFalgs(player, bounds, mate);
 }
 
-void Esp::RenderPlayerBones(Player player, bool mate, bool visible) {
+void Esp::RenderPlayerBones(const Player& player, bool mate, bool visible) {
 	auto color = mate ? cfg::esp::colors::skeleton_team : cfg::esp::colors::skeleton_enemy;
 	if (visible && cfg::esp::spotted::skeleton)
 		color = mate ? cfg::esp::spotted::colors::skeleton_team : cfg::esp::spotted::colors::skeleton_enemy;
@@ -156,7 +154,7 @@ void Esp::RenderPlayerBones(Player player, bool mate, bool visible) {
 	}
 }
 
-void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate, bool visible) {
+void Esp::RenderPlayerTracker(const Player& player, std::pair<Vec2_t, Vec2_t> bounds, bool mate, bool visible) {
 	if (player.bone_list.empty())
 		return;
 
@@ -199,7 +197,7 @@ void Esp::RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, b
 	}
 }
 
-void Esp::RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds) {
+void Esp::RenderPlayerBars(const Player& player, std::pair<Vec2_t, Vec2_t> bounds) {
 	if (cfg::esp::health) {
 		auto x_start = bounds.first.x - 4; // -4 is padding
 		auto x_end = x_start - 2; // -2 is the inner space of the rect
@@ -261,7 +259,7 @@ void Esp::RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds) {
 	}
 }
 
-void Esp::RenderPlayerFalgs(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate) {
+void Esp::RenderPlayerFalgs(const Player& player, std::pair<Vec2_t, Vec2_t> bounds, bool mate) {
 	if (cfg::esp::flags::name) {
 		auto sanitized_name = std::format("{}{}", player.name, (player.bot ? " (Bot)" : ""));
 		auto name_size = ImGui::CalcTextSize(sanitized_name.data());
@@ -367,7 +365,7 @@ void Esp::RenderPlayerFalgs(Player player, std::pair<Vec2_t, Vec2_t> bounds, boo
 	}
 }
 
-void Esp::RenderCrosshair(Player local)
+void Esp::RenderCrosshair(const Player& local)
 {
 	if (!cfg::world::crosshair::enabled)
 		return;
@@ -405,7 +403,7 @@ void Esp::RenderCrosshair(Player local)
 		thickness);
 }
 
-void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
+void Esp::RenderPlayerTracers(const Player& source, const Player& player, bool mate) {
 	if (!cfg::esp::tracers)
 		return;
 
@@ -455,7 +453,7 @@ void Esp::RenderPlayerTracers(Player source, Player player, bool mate) {
 	);
 }
 
-void Esp::RenderBomb(Player local, Bomb bomb) {
+void Esp::RenderBomb(const Player& local, const Bomb& bomb) {
 	if (!cfg::world::bomb::location && !cfg::world::bomb::timer)
 		return;
 

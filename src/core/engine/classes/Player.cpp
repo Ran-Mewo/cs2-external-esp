@@ -152,6 +152,7 @@ bool Player::UpdateSkeleton() {
 	if (!p->read_raw(bone_array, bones, sizeof(bones)))
 		return false;
 
+	this->bone_list.clear();
 	for (int i = 0; i < 30; i++)
 		this->bone_list.push_back({ bones[i].pos });
 
@@ -183,7 +184,7 @@ bool Player::UpdateWeapon() {
 	return true;
 }
 
-bool Player::GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds) {
+bool Player::GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds) const {
 	Vec2_t origin;
 	bool pt1 = matrix.wts(this->pos, size, origin);
 

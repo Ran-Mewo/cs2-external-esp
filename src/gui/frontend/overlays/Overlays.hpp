@@ -11,7 +11,7 @@ public:
     Overlays& operator=(Overlays&&) = delete;
 
     static bool Init();
-    static void Render();
+    static void Render(const Snapshot& snapshot);
 
 private:
     ImFont* font;
@@ -19,6 +19,7 @@ private:
 
     size_t vel_index = 0;
     std::vector<int> vel_buffer;
+    std::vector<ImVec2> vel_points;
     float vel_accumulator = 0.0f;
 private:
     Overlays() {};
@@ -30,11 +31,11 @@ private:
     }
 
     bool InitImpl();
-    void RenderImpl();
+    void RenderImpl(const Snapshot& snapshot);
 
     void RenderNotice();
-    void RenderWatermark();
-    void RenderSpeedChart();
-    void RenderDebugWindow();
-    void RenderSpectatorList();
+    void RenderWatermark(const Snapshot& snapshot);
+    void RenderSpeedChart(const Snapshot& snapshot);
+    void RenderDebugWindow(const Snapshot& snapshot);
+    void RenderSpectatorList(const Snapshot& snapshot);
 };

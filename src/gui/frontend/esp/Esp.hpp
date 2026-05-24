@@ -11,7 +11,7 @@ public:
     Esp& operator=(Esp&&) = delete;
 
     static bool Init();
-    static void Render();
+    static void Render(const Snapshot& snapshot);
 
 private:
     ImGuiIO io;
@@ -30,15 +30,15 @@ private:
     }
 
     bool InitImpl();
-    void RenderImpl();
+    void RenderImpl(const Snapshot& snapshot);
 
-    void RenderPlayer(Player player, bool mate = false, bool visible = false);
-    void RenderPlayerBones(Player player, bool mate, bool visible);
-    void RenderPlayerBars(Player player, std::pair<Vec2_t, Vec2_t> bounds);
-    void RenderPlayerFalgs(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
-    void RenderPlayerTracker(Player player, std::pair<Vec2_t, Vec2_t> bounds, bool mate, bool visible);
-    void RenderPlayerTracers(Player source, Player player, bool mate = false);
+    void RenderPlayer(const Player& player, bool mate = false, bool visible = false);
+    void RenderPlayerBones(const Player& player, bool mate, bool visible);
+    void RenderPlayerBars(const Player& player, std::pair<Vec2_t, Vec2_t> bounds);
+    void RenderPlayerFalgs(const Player& player, std::pair<Vec2_t, Vec2_t> bounds, bool mate = false);
+    void RenderPlayerTracker(const Player& player, std::pair<Vec2_t, Vec2_t> bounds, bool mate, bool visible);
+    void RenderPlayerTracers(const Player& source, const Player& player, bool mate = false);
 
-	void RenderCrosshair(Player local);
-    void RenderBomb(Player local, Bomb bomb);
+	void RenderCrosshair(const Player& local);
+    void RenderBomb(const Player& local, const Bomb& bomb);
 };

@@ -36,6 +36,14 @@ namespace {
 		return proc->read<uintptr_t>(bucket + 0x70 * (ent_index & 0x1FF));
 	}
 
+	const Player* FindByPawn(const Cache& cache, uintptr_t pawn) {
+		for (const auto& p : cache.players) {
+			if (p.pawn_addr == pawn)
+				return &p;
+		}
+		return nullptr;
+	}
+
 	void MouseClick() {
 		INPUT down{ .type = INPUT_MOUSE, .mi = { .dwFlags = MOUSEEVENTF_LEFTDOWN } };
 		INPUT up{ .type = INPUT_MOUSE, .mi = { .dwFlags = MOUSEEVENTF_LEFTUP } };
@@ -46,7 +54,7 @@ namespace {
 	}
 }
 
-void Triggerbot::Tick(const Snapshot& snap) {
+void Triggerbot::Tick(const Cache& cache) {
 	static int32_t locked_ent = -1;
 	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{};
 
@@ -61,11 +69,10 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	}
 
 	auto proc = Engine::GetProcess();
-	auto client = Engine::GetClient();
-	if (!proc || !client.base || !proc->hwnd_ || GetForegroundWindow() != proc->hwnd_)
+	if (!proc || !proc->hwnd_ || GetForegroundWindow() != proc->hwnd_)
 		return;
 
-	const auto& local = snap.local;
+	const auto& local = cache.local;
 	if (!local.alive || !local.pawn_addr)
 		return;
 
@@ -85,16 +92,14 @@ void Triggerbot::Tick(const Snapshot& snap) {
 		return;
 	}
 
-	const uintptr_t entity_list = proc->read<uintptr_t>(client.base + offsets::entityList);
-	const uintptr_t target_pawn = ResolveEnt(entity_list, ent_index);
+	const uintptr_t target_pawn = ResolveEnt(cache.game.entity_list, ent_index);
 	if (!target_pawn) {
 		lose_target();
 		return;
 	}
 
-	const int health = proc->read<int>(target_pawn + offsets::pawn::m_iHealth);
-	const int team = proc->read<int>(target_pawn + offsets::pawn::m_iTeamNum);
-	if (health <= 0 || health > 100 || team == local.team) {
+	const Player* target = FindByPawn(cache, target_pawn);
+	if (!target || target->health <= 0 || target->health > 100 || target->team == local.team) {
 		lose_target();
 		return;
 	}
@@ -110,7 +115,7 @@ void Triggerbot::Tick(const Snapshot& snap) {
 		return;
 
 	MouseClick();
-	next_shot = now + milliseconds(RandMs(100, 220));
+	next_shot = now + milliseconds(RandMs(80, 210));
 }
 
 bool Triggerbot::IsHeld() {

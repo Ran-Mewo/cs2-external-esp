@@ -2,6 +2,7 @@
 #include "window/Window.hpp"
 
 #include "core/engine/Engine.hpp"
+#include "core/engine/cache/Cache.hpp"
 #include "gui/frontend/esp/Esp.hpp"
 #include "gui/frontend/menu/Menu.hpp"
 #include "gui/frontend/overlays/Overlays.hpp"
@@ -85,8 +86,10 @@ void Renderer::ThreadImpl() {
 void Renderer::Render() {
     Window::StartRender();
 
-    Esp::Render();
-    Overlays::Render();
+    const auto snapshot = Cache::CopySnapshot();
+
+    Esp::Render(snapshot);
+    Overlays::Render(snapshot);
 
     Menu::RenderStartupHelp();
     if (isOpen) Menu::Render();

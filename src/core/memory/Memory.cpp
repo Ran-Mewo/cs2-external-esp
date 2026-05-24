@@ -73,6 +73,11 @@ HWND pProcess::GetWindowHandleFromProcessId(DWORD ProcessId) {
 		if (!handle_)
 			return false;
 
+		if (const auto ntdll = GetModuleHandleA("ntdll.dll")) {
+			pfnNtReadVirtualMemory = (pNtReadVirtualMemory)GetProcAddress(ntdll, "NtReadVirtualMemory");
+			pfnNtWriteVirtualMemory = (pNtWriteVirtualMemory)GetProcAddress(ntdll, "NtWriteVirtualMemory");
+		}
+
 		EnumProcessModulesEx(this->handle_, modules, sizeof(modules), &_, LIST_MODULES_64BIT);
 		base_client_.base = (uintptr_t)modules[0];
 

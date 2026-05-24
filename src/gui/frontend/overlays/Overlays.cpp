@@ -8,8 +8,8 @@ bool Overlays::Init() {
 	return GetInstance().InitImpl();
 }
 
-void Overlays::Render() {
-    return GetInstance().RenderImpl();
+void Overlays::Render(const Snapshot& snapshot) {
+    return GetInstance().RenderImpl(snapshot);
 }
 
 bool Overlays::InitImpl() {
@@ -27,15 +27,15 @@ bool Overlays::InitImpl() {
 	return true;
 }
 
-void Overlays::RenderImpl() {
+void Overlays::RenderImpl(const Snapshot& snapshot) {
 	ImGui::PushFont(this->font);
 	{
-		RenderWatermark();
+		RenderWatermark(snapshot);
 
 		RenderNotice();
 
 	#ifdef _DEBUG
-		RenderDebugWindow();
+		RenderDebugWindow(snapshot);
 	#endif
 
 	}
@@ -43,20 +43,19 @@ void Overlays::RenderImpl() {
 
 	ImGui::PushFont(this->font_alt);
 	{
-		RenderSpectatorList();
-		RenderSpeedChart();
+		RenderSpectatorList(snapshot);
+		RenderSpeedChart(snapshot);
 	}
 	ImGui::PopFont();
 }
 
-void Overlays::RenderWatermark() {
+void Overlays::RenderWatermark(const Snapshot& snapshot) {
 	if (!cfg::settings::watermark)
 		return;
 
 	auto& io = ImGui::GetIO();
 	auto d = ImGui::GetBackgroundDrawList();
 
-	auto snapshot = Cache::CopySnapshot();
 	auto& globals = snapshot.globals;
 
 	static int margin = 10;
@@ -151,23 +150,18 @@ void Overlays::RenderNotice() {
 	);
 }
 
-inline Player* FindPlayerByPawnIndex(std::vector<Player>& players, int index) {
-	Player* found = nullptr;
-
-	for (auto& p : players) {
-		if (p.pawn_controller_addr == index) {
-			found = &p;
-			break;
-		}
+inline const Player* FindPlayerByPawnIndex(const std::vector<Player>& players, int index) {
+	for (const auto& p : players) {
+		if (p.pawn_controller_addr == index)
+			return &p;
 	}
-	return found;
+	return nullptr;
 }
 
-void Overlays::RenderSpectatorList() {
+void Overlays::RenderSpectatorList(const Snapshot& snapshot) {
 	if (!cfg::world::spectators::enabled)
 		return;
 
-	auto snapshot = Cache::CopySnapshot();
 	auto& players = snapshot.players;
 
 	const bool is_menu_open = Renderer::IsOpen();
@@ -178,9 +172,9 @@ void Overlays::RenderSpectatorList() {
 	ImGuiTableFlags flags_table = ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_BordersOuterH | ImGuiTableFlags_BordersV;
 
 	bool should_render = false;
-	for (Player& p : players) {
+	for (const Player& p : players) {
 		if (auto i = p.observer_services.target) {
-			Player* target = FindPlayerByPawnIndex(players, i);
+			const Player* target = FindPlayerByPawnIndex(players, i);
 
 			if (self_only && (!target || !target->localplayer))
 				continue;
@@ -217,13 +211,13 @@ void Overlays::RenderSpectatorList() {
 			ImGui::TableSetupColumn("Target");
 			ImGui::TableHeadersRow();
 
-			for (Player& player : players) {
+			for (const Player& player : players) {
 				if (player.alive) continue;
 
 				int targetIndex = player.observer_services.target;
 				if (targetIndex == 0) continue;
 
-				Player* target = FindPlayerByPawnIndex(players, targetIndex);
+				const Player* target = FindPlayerByPawnIndex(players, targetIndex);
 
 				if (self_only && (!target || !target->localplayer))
 					continue;
@@ -245,11 +239,11 @@ void Overlays::RenderSpectatorList() {
 		}
 	}
 	else {
-		for (Player& player : players) {
+		for (const Player& player : players) {
 			if (player.alive) continue;
 			int targetIndex = player.observer_services.target;
 			if (targetIndex == 0) continue;
-			Player* target = FindPlayerByPawnIndex(players, targetIndex);
+			const Player* target = FindPlayerByPawnIndex(players, targetIndex);
 
 			if (self_only && (!target || !target->localplayer)) continue;
 
@@ -260,14 +254,13 @@ void Overlays::RenderSpectatorList() {
 	ImGui::End();
 }
 
-void Overlays::RenderSpeedChart() {
+void Overlays::RenderSpeedChart(const Snapshot& snapshot) {
 	if (!cfg::world::velocity::enabled)
 		return;
 
 	auto& io = ImGui::GetIO();
 	auto d = ImGui::GetBackgroundDrawList();
 
-	auto snapshot = Cache::CopySnapshot();
 	auto& local = snapshot.local;
 
 	const static float padding = 10.0f;
@@ -322,8 +315,8 @@ void Overlays::RenderSpeedChart() {
 	vel_accumulator += io.DeltaTime;
 	size_t buff_size = vel_buffer.size();
 
-	std::vector<ImVec2> points;
-	points.reserve(buff_size);
+	if (vel_points.size() != buff_size)
+		vel_points.resize(buff_size);
 
 	float sample_interval = 1.0f / rate;
 
@@ -348,12 +341,12 @@ void Overlays::RenderSpeedChart() {
 
 		float y = bottom - (normalized * height);
 
-		points.emplace_back(x, y);
+		vel_points[i] = ImVec2(x, y);
 	}
 
 	d->AddPolyline(
-		points.data(),
-		static_cast<int>(points.size()),
+		vel_points.data(),
+		static_cast<int>(vel_points.size()),
 		IM_COL32(255, 255, 255, 255),
 		ImDrawFlags_None,
 		1.0f
@@ -371,11 +364,10 @@ void Overlays::RenderSpeedChart() {
 }
 
 #ifdef _DEBUG
-void Overlays::RenderDebugWindow() {
+void Overlays::RenderDebugWindow(const Snapshot& snapshot) {
 	auto& io = ImGui::GetIO();
 	auto d = ImGui::GetBackgroundDrawList();
 
-	auto snapshot = Cache::CopySnapshot();
 	auto& game = snapshot.game;
 	auto& bomb = snapshot.bomb;
 	auto& globals = snapshot.globals;

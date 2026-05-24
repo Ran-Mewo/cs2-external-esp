@@ -5,7 +5,7 @@
 
 #include <atomic>
 #include <memory>
-#include <mutex>
+#include <shared_mutex>
 #include <string>
 #include <thread>
 
@@ -21,7 +21,7 @@ private:
     void LoadAsync(std::string map);
     void SetVisCheck(std::unique_ptr<VisCheck> vis);
 
-    std::mutex mtx_;
+    std::shared_mutex mtx_;
     std::unique_ptr<VisCheck> vis_;
     std::atomic<bool> loading_{ false };
     std::thread worker_;

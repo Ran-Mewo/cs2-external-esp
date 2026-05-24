@@ -1,5 +1,7 @@
 #include "Cache.hpp"
 
+#include <cstring>
+
 #include "core/engine/Engine.hpp" // Circular dep
 #include "core/offsets/Dumper.hpp"
 #include "core/vischeck/VisCheckManager.h"
@@ -44,9 +46,10 @@ bool Cache::RefreshImpl() {
 #endif
 
     game.UpdateEntityList();
-    const auto prevMap = std::string(globals.map_name);
+    char prev_map[sizeof(globals.map_name)]{};
+    std::memcpy(prev_map, globals.map_name, sizeof(prev_map));
     globals.Update();
-    if (std::string(globals.map_name) != prevMap)
+    if (std::strncmp(globals.map_name, prev_map, sizeof(globals.map_name)) != 0)
         VisCheckManager::OnMapChanged(globals.map_name);
     bomb.Update();
 

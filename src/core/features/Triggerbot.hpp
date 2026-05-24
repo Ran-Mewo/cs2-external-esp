@@ -4,6 +4,6 @@
 
 class Triggerbot {
 public:
-	static void Tick(const Snapshot& snap);
+	static void Tick(const Cache& cache);
 	static bool IsHeld();
 };

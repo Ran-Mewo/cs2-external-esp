@@ -62,7 +62,7 @@ void Engine::Thread() {
         Cache::Refresh();
 
         if (cfg::triggerbot::enabled && Triggerbot::IsHeld())
-            Triggerbot::Tick(Cache::CopySnapshot());
+            Triggerbot::Tick(Cache::Get());
 
         if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);

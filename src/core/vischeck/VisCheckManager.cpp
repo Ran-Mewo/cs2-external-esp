@@ -60,13 +60,13 @@ void VisCheckManager::OnMapChanged(const char* mapName) {
 
 bool VisCheckManager::IsReady() {
 	auto& self = Get();
-	std::lock_guard lock(self.mtx_);
+	std::shared_lock lock(self.mtx_);
 	return self.vis_ && self.vis_->IsReady();
 }
 
 bool VisCheckManager::IsVisible(const Vec3_t& from, const Vec3_t& to) {
 	auto& self = Get();
-	std::lock_guard lock(self.mtx_);
+	std::shared_lock lock(self.mtx_);
 	if (!self.vis_ || !self.vis_->IsReady())
 		return false;
 
@@ -77,13 +77,13 @@ bool VisCheckManager::IsVisible(const Vec3_t& from, const Vec3_t& to) {
 }
 
 void VisCheckManager::SetVisCheck(std::unique_ptr<VisCheck> vis) {
-	std::lock_guard lock(mtx_);
+	std::unique_lock lock(mtx_);
 	vis_ = std::move(vis);
 }
 
 void VisCheckManager::LoadAsync(std::string map) {
 	{
-		std::lock_guard lock(mtx_);
+		std::unique_lock lock(mtx_);
 		if (pendingMap_ == map && (loading_ || (vis_ && vis_->IsReady())))
 			return;
 		pendingMap_ = map;
