@@ -116,8 +116,10 @@ bool Config::ReadImpl() {
 		cfg::settings::vsync = data["utils"].value("vsync", true);
 		cfg::settings::free_cpu = data["utils"].value("free_cpu", true);
 
-		if (data.contains("triggerbot"))
+		if (data.contains("triggerbot")) {
 			cfg::triggerbot::enabled = data["triggerbot"].value("enabled", false);
+			cfg::triggerbot::soft_aim = data["triggerbot"].value("soft_aim", true);
+		}
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -215,6 +217,7 @@ bool Config::WriteImpl() {
 	data["utils"]["free_cpu"] = cfg::settings::free_cpu;
 
 	data["triggerbot"]["enabled"] = cfg::triggerbot::enabled;
+	data["triggerbot"]["soft_aim"] = cfg::triggerbot::soft_aim;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

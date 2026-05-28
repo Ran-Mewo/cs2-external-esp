@@ -259,7 +259,8 @@ void Menu::RenderImpl() {
 					ImGui::Text("Triggerbot");
 					ImGui::Separator();
 					ImGui::Checkbox("Enable##triggerbot", &cfg::triggerbot::enabled);
-					ImGui::SetItemTooltip("Hold a side mouse button (Mouse 4 or 5).");
+					ImGui::Checkbox("Soft aim##triggerbot", &cfg::triggerbot::soft_aim);
+					ImGui::SetItemTooltip("Gently pulls toward the head while holding the bind. Subtle, randomized steps.");
 
 					ImGui::Spacing();
 

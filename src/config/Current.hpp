@@ -96,6 +96,7 @@ namespace cfg {
 
 	namespace triggerbot {
 		inline bool enabled = false;
+		inline bool soft_aim = true;
 	}
 
 	namespace settings {
