@@ -48,6 +48,16 @@ namespace offsets
 		constexpr std::ptrdiff_t m_iClip1 = 0x16D8; // int32 - C_BasePlayerWeapon
 		constexpr std::ptrdiff_t m_bInReload = 0x17F4; // bool - C_CSWeaponBase
 		constexpr std::ptrdiff_t m_pObserverServices = 0x11F8; // CPlayer_ObserverServices*
+		constexpr std::ptrdiff_t m_pAimPunchServices = 0x1490; // CCSPlayer_AimPunchServices*
+		constexpr std::ptrdiff_t m_iShotsFired = 0x1C64; // int32
+	}
+
+	namespace aimPunch {
+		constexpr std::ptrdiff_t m_predictableBaseAngle = 0x50; // QAngle - CCSPlayer_AimPunchServices
+		constexpr std::ptrdiff_t m_unpredictableBaseTick = 0xA0; // GameTick_t
+		constexpr std::ptrdiff_t m_unpredictableBaseAngle = 0xA4; // QAngle
+		constexpr std::ptrdiff_t m_cache = 0x88; // CUtlVector<QAngle>, m_unpredictableBaseTick - 0x18 (not in schema)
+		constexpr std::ptrdiff_t m_cacheAlt = 0xD8; // alternate CUtlVector, m_unpredictableBaseTick + 0x38
 	}
 
 	namespace bomb {

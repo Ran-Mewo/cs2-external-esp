@@ -120,6 +120,13 @@ bool Config::ReadImpl() {
 			cfg::triggerbot::enabled = data["triggerbot"].value("enabled", false);
 			cfg::triggerbot::soft_aim = data["triggerbot"].value("soft_aim", true);
 		}
+
+		if (data.contains("rcs")) {
+			cfg::rcs::enabled = data["rcs"].value("enabled", false);
+			cfg::rcs::strength = data["rcs"].value("strength", 0.72f);
+			cfg::rcs::miss_chance = data["rcs"].value("miss_chance", 6);
+			cfg::rcs::max_step = data["rcs"].value("max_step", 11);
+		}
 	}
 	catch (const std::exception& e) {
 		LOGF(FATAL, "Failed to parse configuration");
@@ -218,6 +225,11 @@ bool Config::WriteImpl() {
 
 	data["triggerbot"]["enabled"] = cfg::triggerbot::enabled;
 	data["triggerbot"]["soft_aim"] = cfg::triggerbot::soft_aim;
+
+	data["rcs"]["enabled"] = cfg::rcs::enabled;
+	data["rcs"]["strength"] = cfg::rcs::strength;
+	data["rcs"]["miss_chance"] = cfg::rcs::miss_chance;
+	data["rcs"]["max_step"] = cfg::rcs::max_step;
 
 	f << std::setw(4) << data << std::endl;
 	f.close();

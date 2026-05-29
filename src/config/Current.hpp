@@ -99,6 +99,13 @@ namespace cfg {
 		inline bool soft_aim = true;
 	}
 
+	namespace rcs {
+		inline bool enabled = false;
+		inline float strength = 0.72f;
+		inline int miss_chance = 6;
+		inline int max_step = 11;
+	}
+
 	namespace settings {
 		inline bool watermark = true;
 		inline bool streamproof = false;

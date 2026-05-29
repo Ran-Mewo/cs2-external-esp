@@ -199,6 +199,7 @@
     </ClCompile>
     <ClCompile Include="config\Config.cpp" />
     <ClCompile Include="core\engine\cache\Cache.cpp" />
+    <ClCompile Include="core\features\Recoil.cpp" />
     <ClCompile Include="core\features\Triggerbot.cpp" />
     <ClCompile Include="core\engine\classes\Bomb.cpp" />
     <ClCompile Include="core\engine\classes\ObserverServices.cpp" />
@@ -241,6 +242,7 @@
     <ClInclude Include="config\Config.hpp" />
     <ClInclude Include="config\Current.hpp" />
     <ClInclude Include="core\engine\cache\Cache.hpp" />
+    <ClInclude Include="core\features\Recoil.hpp" />
     <ClInclude Include="core\features\Triggerbot.hpp" />
     <ClInclude Include="core\engine\classes\Bomb.hpp" />
     <ClInclude Include="core\engine\types\Weapons.hpp" />

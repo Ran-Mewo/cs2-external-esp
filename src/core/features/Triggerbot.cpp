@@ -9,6 +9,7 @@
 namespace {
 	constexpr auto kDropTarget = 450ms;
 	constexpr float kSoftAimMaxDeg = 10.f;
+	constexpr float kTrackMaxDeg = 22.f;
 	constexpr float kAimScale = 3.2f;
 
 	struct Target {
@@ -111,24 +112,34 @@ namespace {
 		return { pawn, FindPlayer(snap, pawn) };
 	}
 
-	void SoftAim(const Vec3_t& eye, const Vec3_t& view, const Vec3_t& head) {
+	Vec3_t AimPos(const std::shared_ptr<pProcess>& proc, const Player* player, uintptr_t pawn) {
+		if (player)
+			return HeadPos(*player);
+
+		const Vec3_t pos = proc->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin);
+		return pos + Vec3_t{ 0.f, 0.f, 64.f };
+	}
+
+	void SoftAim(const Vec3_t& eye, const Vec3_t& view, const Vec3_t& head, bool tracking) {
 		Vec3_t wish = (head - eye).ToAngle();
 		float pitch_d = wish.x - view.x;
 		float yaw_d = wish.y - view.y;
 		NormalizeYaw(yaw_d);
 
+		const float max_deg = tracking ? kTrackMaxDeg : kSoftAimMaxDeg;
 		const float dist = std::hypot(pitch_d, yaw_d);
-		if (dist < 0.1f || dist > kSoftAimMaxDeg)
+		if (dist < 0.1f || dist > max_deg)
 			return;
 
-		const float t = RandMs(9, 20) / 100.f;
+		const float t = (tracking ? RandMs(14, 28) : RandMs(9, 20)) / 100.f;
 		pitch_d *= t;
 		yaw_d *= t;
 
+		const int cap = tracking ? 14 : 10;
 		int dx = (int)(yaw_d / kAimScale) + RandMs(-1, 1);
 		int dy = (int)(-pitch_d / kAimScale) + RandMs(-1, 1);
-		dx = std::clamp(dx, -10, 10);
-		dy = std::clamp(dy, -10, 10);
+		dx = std::clamp(dx, -cap, cap);
+		dy = std::clamp(dy, -cap, cap);
 		if (!dx && !dy)
 			return;
 
@@ -169,31 +180,41 @@ void Triggerbot::Tick(const Snapshot& snap) {
 		return;
 
 	const auto now = steady_clock::now();
-	const Target target = CrosshairTarget(proc, snap, local_pawn);
+	const int local_team = proc->read<int>(local_pawn + offsets::pawn::m_iTeamNum);
+	const Target crosshair = CrosshairTarget(proc, snap, local_pawn);
 
-	if (!target.pawn) {
+	if (crosshair.pawn) {
+		if (crosshair.pawn != locked_pawn) {
+			locked_pawn = crosshair.pawn;
+			ready_at = now + milliseconds(ReactionMs());
+		}
+		miss_since = {};
+	} else if (locked_pawn) {
 		if (miss_since == steady_clock::time_point{})
 			miss_since = now;
-		if (now - miss_since < kDropTarget)
+		if (now - miss_since >= kDropTarget) {
+			reset();
 			return;
+		}
+	} else {
+		return;
+	}
+
+	if (!ValidEnemy(proc, locked_pawn, local_team)) {
 		reset();
 		return;
 	}
 
-	miss_since = {};
+	const Player* track = FindPlayer(snap, locked_pawn);
+	const bool on_crosshair = crosshair.pawn == locked_pawn;
 
-	if (cfg::triggerbot::soft_aim && target.player) {
+	if (cfg::triggerbot::soft_aim) {
 		const Vec3_t eye = snap.local.pos + Vec3_t{ 0.f, 0.f, snap.local.view_offset_z };
 		const Vec3_t view = proc->read<Vec3_t>(local_pawn + offsets::pawn::m_angEyeAngles);
-		SoftAim(eye, view, HeadPos(*target.player));
+		SoftAim(eye, view, AimPos(proc, track, locked_pawn), !on_crosshair);
 	}
 
-	if (target.pawn != locked_pawn) {
-		locked_pawn = target.pawn;
-		ready_at = now + milliseconds(ReactionMs());
-	}
-
-	if (now < ready_at || now < next_shot)
+	if (!on_crosshair || now < ready_at || now < next_shot)
 		return;
 
 	MouseClick();

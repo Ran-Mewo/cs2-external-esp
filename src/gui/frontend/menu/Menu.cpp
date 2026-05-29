@@ -260,7 +260,15 @@ void Menu::RenderImpl() {
 					ImGui::Separator();
 					ImGui::Checkbox("Enable##triggerbot", &cfg::triggerbot::enabled);
 					ImGui::Checkbox("Soft aim##triggerbot", &cfg::triggerbot::soft_aim);
-					ImGui::SetItemTooltip("Gently pulls toward the head while holding the bind. Subtle, randomized steps.");
+					ImGui::SetItemTooltip("Tracks locked target onto head. Stronger pull when they leave crosshair. Still only shoots on crosshair.");
+
+					ImGui::Spacing();
+
+					ImGui::Text("Recoil assist");
+					ImGui::Separator();
+					ImGui::Checkbox("Enable##rcs", &cfg::rcs::enabled);
+					ImGui::SliderFloat("Strength##rcs", &cfg::rcs::strength, 0.4f, 0.9f, "%.2f");
+					ImGui::SetItemTooltip("External mouse pull-down. Partial, randomized, weakens on long sprays.");
 
 					ImGui::Spacing();
 

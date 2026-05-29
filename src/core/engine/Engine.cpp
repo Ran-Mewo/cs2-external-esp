@@ -1,6 +1,7 @@
 #include "Engine.hpp"
 
 #include "core/features/Triggerbot.hpp"
+#include "core/features/Recoil.hpp"
 #include "core/offsets/Dumper.hpp"
 #include "core/engine/cache/Cache.hpp"
 
@@ -63,6 +64,9 @@ void Engine::Thread() {
 
         if (cfg::triggerbot::enabled && Triggerbot::IsHeld())
             Triggerbot::Tick(Cache::CopySnapshot());
+
+        if (cfg::rcs::enabled && Recoil::IsShooting())
+            Recoil::Tick(Cache::CopySnapshot());
 
         if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);
