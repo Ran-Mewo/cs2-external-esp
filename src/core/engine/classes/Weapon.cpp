@@ -3,6 +3,37 @@
 #include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
 
+#include "core/engine/types/Weapons.hpp"
+
+namespace {
+	float DefaultPenetration(short id) {
+		switch (id) {
+		case weapon_awp: case weapon_ssg08: case weapon_scar20: case weapon_g3sg1:
+			return 280.f;
+		case weapon_deagle: case weapon_revolver:
+			return 90.f;
+		case weapon_ak47: case weapon_m4a1: case weapon_m4a1_silencer: case weapon_aug:
+		case weapon_famas: case weapon_galilar: case weapon_sg556: case weapon_m249: case weapon_negev:
+			return 200.f;
+		case weapon_glock: case weapon_usp_silencer: case weapon_hkp2000: case weapon_elite:
+		case weapon_fiveseven: case weapon_tec9: case weapon_cz75a: case weapon_p250:
+		case weapon_mac10: case weapon_mp9: case weapon_mp7: case weapon_ump45: case weapon_bizon:
+		case weapon_p90: case weapon_nova: case weapon_xm1014: case weapon_mag7: case weapon_sawedoff:
+			return 35.f;
+		default:
+			return 55.f;
+		}
+	}
+
+	float NormalizePenetration(float pen, short id) {
+		if (pen <= 0.f)
+			return DefaultPenetration(id);
+		if (pen < 12.f)
+			pen *= 25.f;
+		return std::min(pen, 300.f);
+	}
+}
+
 bool Weapon::Update() {
 	auto p = Engine::GetProcess();
     auto client = Engine::GetClient();
@@ -25,6 +56,10 @@ bool Weapon::Update() {
 
 	if (!this->item_index)
 		return false;
+
+	const uintptr_t vdata = p->read<uintptr_t>(weapon_ptr + offsets::entity::m_nSubclassID + 0x8);
+	const float raw = vdata ? p->read<float>(vdata + offsets::weaponVData::m_flPenetration) : 0.f;
+	this->penetration = NormalizePenetration(raw, this->item_index);
 
     this->name = ToString();	
     this->ammo = p->read<int32_t>(weapon_ptr + offsets::pawn::m_iClip1);

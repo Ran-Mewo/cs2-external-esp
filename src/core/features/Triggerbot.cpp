@@ -1,6 +1,7 @@
 #include "Triggerbot.hpp"
 
 #include "core/engine/Engine.hpp"
+#include "core/engine/types/Matrix.hpp"
 #include "core/offsets/Dumper.hpp"
 
 #include <cmath>
@@ -8,9 +9,10 @@
 
 namespace {
 	constexpr auto kDropTarget = 450ms;
-	constexpr float kSoftAimMaxDeg = 10.f;
-	constexpr float kTrackMaxDeg = 22.f;
-	constexpr float kAimScale = 3.2f;
+	constexpr auto kAimInterval = 6ms;
+	constexpr float kPxToMouse = 0.22f;
+	constexpr float kFlickMaxPx = 120.f;
+	constexpr float kTrackMaxPx = 240.f;
 
 	struct Target {
 		uintptr_t pawn = 0;
@@ -28,6 +30,10 @@ namespace {
 	std::mt19937& Rng() {
 		static thread_local std::mt19937 g{ std::random_device{}() };
 		return g;
+	}
+
+	float RandF(float lo, float hi) {
+		return std::uniform_real_distribution{ lo, hi }(Rng());
 	}
 
 	int RandMs(int lo, int hi) {
@@ -92,9 +98,11 @@ namespace {
 		return p.pos + Vec3_t{ 0.f, 0.f, 64.f };
 	}
 
-	void NormalizeYaw(float& yaw) {
-		while (yaw > 180.f) yaw -= 360.f;
-		while (yaw < -180.f) yaw += 360.f;
+	Vec2_t ScreenSize(HWND hwnd) {
+		RECT rc{};
+		if (!hwnd || !GetClientRect(hwnd, &rc))
+			return { 1920.f, 1080.f };
+		return { (float)(rc.right - rc.left), (float)(rc.bottom - rc.top) };
 	}
 
 	Target CrosshairTarget(const std::shared_ptr<pProcess>& proc, const Snapshot& snap, uintptr_t local_pawn) {
@@ -120,26 +128,34 @@ namespace {
 		return pos + Vec3_t{ 0.f, 0.f, 64.f };
 	}
 
-	void SoftAim(const Vec3_t& eye, const Vec3_t& view, const Vec3_t& head, bool tracking) {
-		Vec3_t wish = (head - eye).ToAngle();
-		float pitch_d = wish.x - view.x;
-		float yaw_d = wish.y - view.y;
-		NormalizeYaw(yaw_d);
-
-		const float max_deg = tracking ? kTrackMaxDeg : kSoftAimMaxDeg;
-		const float dist = std::hypot(pitch_d, yaw_d);
-		if (dist < 0.1f || dist > max_deg)
+	void SoftAim(const view_matrix_t& matrix, const Vec2_t& screen, const Vec3_t& head, bool tracking) {
+		Vec2_t target;
+		if (!matrix.wts(head, screen, target, false))
 			return;
 
-		const float t = (tracking ? RandMs(14, 28) : RandMs(9, 20)) / 100.f;
-		pitch_d *= t;
-		yaw_d *= t;
+		const float cx = screen.x * 0.5f, cy = screen.y * 0.5f;
+		float px = target.x - cx, py = target.y - cy;
+		const float dist = std::hypot(px, py);
+		const float max_px = tracking ? kTrackMaxPx : kFlickMaxPx;
+		if (dist < 1.5f || dist > max_px)
+			return;
 
-		const int cap = tracking ? 14 : 10;
-		int dx = (int)(yaw_d / kAimScale) + RandMs(-1, 1);
-		int dy = (int)(-pitch_d / kAimScale) + RandMs(-1, 1);
-		dx = std::clamp(dx, -cap, cap);
-		dy = std::clamp(dy, -cap, cap);
+		const float t = (tracking ? 0.38f : 0.55f) * RandF(0.95f, 1.05f);
+		px *= t * kPxToMouse;
+		py *= t * kPxToMouse;
+
+		const float cap = tracking ? 14.f : 10.f;
+		if (const float mag = std::hypot(px, py); mag > cap) {
+			px *= cap / mag;
+			py *= cap / mag;
+		}
+
+		int dx = (int)std::lround(px);
+		int dy = (int)std::lround(py);
+		if (!dx && std::abs(px) >= 1.f)
+			dx = px > 0.f ? 1 : -1;
+		if (!dy && std::abs(py) >= 1.f)
+			dy = py > 0.f ? 1 : -1;
 		if (!dx && !dy)
 			return;
 
@@ -158,11 +174,11 @@ namespace {
 
 void Triggerbot::Tick(const Snapshot& snap) {
 	static uintptr_t locked_pawn = 0;
-	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{};
+	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{}, last_aim{};
 
 	auto reset = [&] {
 		locked_pawn = 0;
-		ready_at = next_shot = miss_since = {};
+		ready_at = next_shot = miss_since = last_aim = {};
 	};
 
 	if (!cfg::enabled || !cfg::triggerbot::enabled || !SideButtonHeld()) {
@@ -208,10 +224,9 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	const Player* track = FindPlayer(snap, locked_pawn);
 	const bool on_crosshair = crosshair.pawn == locked_pawn;
 
-	if (cfg::triggerbot::soft_aim) {
-		const Vec3_t eye = snap.local.pos + Vec3_t{ 0.f, 0.f, snap.local.view_offset_z };
-		const Vec3_t view = proc->read<Vec3_t>(local_pawn + offsets::pawn::m_angEyeAngles);
-		SoftAim(eye, view, AimPos(proc, track, locked_pawn), !on_crosshair);
+	if (cfg::triggerbot::soft_aim && now - last_aim >= kAimInterval) {
+		SoftAim(snap.game.view_matrix, ScreenSize(proc->hwnd_), AimPos(proc, track, locked_pawn), !on_crosshair);
+		last_aim = now;
 	}
 
 	if (!on_crosshair || now < ready_at || now < next_shot)

@@ -14,6 +14,7 @@
     <DebugSymbols>false</DebugSymbols>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="ValvePak" Version="4.0.0.142" />
     <PackageReference Include="ValveResourceFormat" Version="19.1.6199" />
   </ItemGroup>
 </Project>

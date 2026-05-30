@@ -1,7 +1,6 @@
 #include "VpkMapExtractor.h"
 
 #include "PathUtil.h"
-#include "Math.hpp"
 
 #include <vpkpp/PackFile.h>
 
@@ -122,7 +121,7 @@ std::optional<std::string> VpkMapExtractor::EnsureTriCache(const std::string& ma
 		return "VrfExtract.exe not found: " + vrf.string();
 	}
 
-	const auto cmd = Quote(vrf) + L" " + Quote(vmdlPath) + L" " + Quote(cache);
+	const auto cmd = Quote(vrf) + L" " + Quote(vmdlPath) + L" " + Quote(cache) + L" " + Quote(*root);
 	const auto proc = RunProcess(cmd);
 	if (!proc.ok) {
 		LOGF(WARNING, "VisCheck: VrfExtract failed for '{}' (exit {}): {}", map, proc.exitCode, proc.output);
@@ -134,9 +133,7 @@ std::optional<std::string> VpkMapExtractor::EnsureTriCache(const std::string& ma
 		return "VrfExtract produced empty tri: " + cache.string();
 	}
 
-	const auto triBytes = std::filesystem::file_size(cache);
-	const auto triCount = triBytes / sizeof(TriangleCombined);
-	LOGF(INFO, "VisCheck: built tri cache for '{}' ({} triangles, {} bytes)", map, triCount, triBytes);
+	LOGF(INFO, "VisCheck: built tri cache for '{}'", map);
 	return std::nullopt;
 }
 

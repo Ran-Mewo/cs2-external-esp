@@ -2,45 +2,50 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <fstream>
 #include <limits>
+#include <utility>
+#include <vector>
 
 namespace {
 	constexpr size_t kLeafThreshold = 4;
 
-	bool LoadTriFile(const std::string& path, std::vector<TriangleCombined>& out) {
+#pragma pack(push, 1)
+	struct Tri2Header {
+		char magic[4];
+		uint32_t tri_count;
+		uint32_t attr_count;
+	};
+#pragma pack(pop)
+
+	bool LoadTri2(const std::string& path, std::vector<TriangleCombined>& tris, std::vector<float>& costs) {
 		std::ifstream in(path, std::ios::binary);
-		if (!in)
+		Tri2Header hdr{};
+		if (!in.read(reinterpret_cast<char*>(&hdr), sizeof(hdr)) || std::memcmp(hdr.magic, "TRI2", 4))
 			return false;
 
-		in.seekg(0, std::ios::end);
-		const auto size = in.tellg();
-		in.seekg(0, std::ios::beg);
-		if (size <= 0 || size % sizeof(TriangleCombined) != 0)
-			return false;
+		costs.resize(hdr.attr_count);
+		in.read(reinterpret_cast<char*>(costs.data()), hdr.attr_count * sizeof(float));
 
-		const auto count = static_cast<size_t>(size) / sizeof(TriangleCombined);
-		out.resize(count);
-		in.read(reinterpret_cast<char*>(out.data()), size);
+		tris.resize(hdr.tri_count);
+		for (auto& tri : tris) {
+			in.read(reinterpret_cast<char*>(&tri.v0), sizeof(Vector3) * 3);
+			uint16_t pad{};
+			in.read(reinterpret_cast<char*>(&tri.attr), sizeof(tri.attr));
+			in.read(reinterpret_cast<char*>(&pad), sizeof(pad));
+		}
 		return in.good();
 	}
-} // namespace
+}
 
 VisCheck::VisCheck(const std::string& triFile) {
 	std::vector<TriangleCombined> tris;
-	if (LoadTriFile(triFile, tris))
-		BuildFromTriangles(std::move(tris));
-}
-
-VisCheck::VisCheck(std::vector<TriangleCombined> triangles) {
-	BuildFromTriangles(std::move(triangles));
-}
-
-void VisCheck::BuildFromTriangles(std::vector<TriangleCombined> triangles) {
-	if (triangles.empty())
+	if (!LoadTri2(triFile, tris, penCosts_))
 		return;
-	triCount_ = triangles.size();
-	bvhNodes.push_back(BuildBVH(triangles));
+
+	triCount_ = tris.size();
+	root_ = BuildBVH(tris);
 }
 
 std::unique_ptr<BVHNode> VisCheck::BuildBVH(const std::vector<TriangleCombined>& tris) {
@@ -81,66 +86,88 @@ std::unique_ptr<BVHNode> VisCheck::BuildBVH(const std::vector<TriangleCombined>&
 	return node;
 }
 
-bool VisCheck::IntersectBVH(const BVHNode* node, const Vector3& origin, const Vector3& dir, float maxDist, float& hitDist) const {
-	if (!node || !node->bounds.RayIntersects(origin, dir))
-		return false;
+void VisCheck::CollectHits(const BVHNode* node, const Vector3& origin, const Vector3& dir, float maxDist, std::vector<std::pair<float, uint16_t>>& out) const {
+	if (!node->bounds.RayIntersects(origin, dir))
+		return;
 
-	bool hit = false;
 	if (node->IsLeaf()) {
 		for (const auto& tri : node->triangles) {
 			float t;
-			if (RayIntersectsTriangle(origin, dir, tri, t) && t < maxDist && t < hitDist) {
-				hitDist = t;
-				hit = true;
-			}
+			if (RayTriangle(origin, dir, tri, t) && t > 1e-4f && t < maxDist)
+				out.emplace_back(t, tri.attr);
 		}
-		return hit;
+		return;
 	}
 
 	if (node->left)
-		hit |= IntersectBVH(node->left.get(), origin, dir, maxDist, hitDist);
+		CollectHits(node->left.get(), origin, dir, maxDist, out);
 	if (node->right)
-		hit |= IntersectBVH(node->right.get(), origin, dir, maxDist, hitDist);
-	return hit;
+		CollectHits(node->right.get(), origin, dir, maxDist, out);
 }
 
-bool VisCheck::IsPointVisible(const Vector3& from, const Vector3& to) const {
-	if (!IsReady())
+float VisCheck::SurfaceCost(uint16_t entry, uint16_t exit) const {
+	auto cost = [this](uint16_t attr) {
+		if (attr >= penCosts_.size())
+			return 150.f;
+		const float c = penCosts_[attr];
+		return c >= 900.f ? 999.f : c;
+	};
+	return entry == exit ? cost(entry) : (cost(entry) + cost(exit)) * 0.5f;
+}
+
+bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) const {
+	if (!root_)
 		return false;
 
-	Vector3 delta = to - from;
-	const float distance = std::sqrt(delta.dot(delta));
-	if (distance < 1e-4f)
+	const Vector3 delta = to - from;
+	const float dist = std::sqrt(delta.dot(delta));
+	if (dist < 1.f)
 		return true;
 
-	const Vector3 direction = { delta.x / distance, delta.y / distance, delta.z / distance };
-	constexpr float originPadding = 32.f;
-	if (distance <= originPadding)
+	const Vector3 dir = { delta.x / dist, delta.y / dist, delta.z / dist };
+
+	std::vector<std::pair<float, uint16_t>> hits;
+	CollectHits(root_.get(), from, dir, dist, hits);
+	if (hits.empty())
+		return weaponPen <= 0.f;
+
+	std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+
+	// Ignore hits in the target's hull zone — player bones aren't in the BVH mesh.
+	constexpr float kNearTarget = 12.f;
+	std::vector<std::pair<float, uint16_t>> block;
+	block.reserve(hits.size());
+	for (const auto& h : hits) {
+		if (h.first < dist - kNearTarget)
+			block.push_back(h);
+	}
+
+	if (block.empty())
 		return true;
 
-	const Vector3 rayOrigin = {
-		from.x + direction.x * originPadding,
-		from.y + direction.y * originPadding,
-		from.z + direction.z * originPadding
-	};
-	const float maxTraceDistance = distance - originPadding;
-	float hitDistance = std::numeric_limits<float>::max();
+	if (weaponPen <= 0.f)
+		return false;
 
-	for (const auto& root : bvhNodes) {
-		if (IntersectBVH(root.get(), rayOrigin, direction, maxTraceDistance, hitDistance)
-			&& hitDistance < maxTraceDistance - 1.f)
+	float budget = weaponPen;
+	for (size_t i = 0; i < block.size();) {
+		if (i + 1 >= block.size())
 			return false;
+
+		const float cost = SurfaceCost(block[i].second, block[i + 1].second);
+		if (cost >= 900.f || cost > budget)
+			return false;
+
+		budget -= cost;
+		i += 2;
 	}
 	return true;
 }
 
-bool VisCheck::RayIntersectsTriangle(const Vector3& origin, const Vector3& dir, const TriangleCombined& tri, float& t) {
-	constexpr float kEps = 1e-7f;
-	const Vector3 e1 = tri.v1 - tri.v0;
-	const Vector3 e2 = tri.v2 - tri.v0;
+bool VisCheck::RayTriangle(const Vector3& origin, const Vector3& dir, const TriangleCombined& tri, float& t) {
+	const Vector3 e1 = tri.v1 - tri.v0, e2 = tri.v2 - tri.v0;
 	const Vector3 h = dir.cross(e2);
 	const float a = e1.dot(h);
-	if (a > -kEps && a < kEps)
+	if (a > -1e-7f && a < 1e-7f)
 		return false;
 
 	const float f = 1.f / a;
@@ -155,5 +182,5 @@ bool VisCheck::RayIntersectsTriangle(const Vector3& origin, const Vector3& dir, 
 		return false;
 
 	t = f * e2.dot(q);
-	return t > kEps;
+	return t > 1e-7f;
 }

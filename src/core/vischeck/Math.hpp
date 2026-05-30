@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <limits>
 
 struct Vector3 {
@@ -36,6 +37,8 @@ struct AABB {
 
 struct TriangleCombined {
     Vector3 v0, v1, v2;
+    uint16_t attr = 0;
+    uint16_t pad = 0;
 
     AABB ComputeAABB() const;
 };

@@ -5,43 +5,32 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstring>
+#include <fstream>
 
 namespace {
 	std::string TrimMapName(const char* mapName) {
-		if (!mapName)
-			return {};
 		std::string map(mapName);
 		if (const auto nul = map.find('\0'); nul != std::string::npos)
 			map.resize(nul);
 		if (map.starts_with("maps/"))
 			map.erase(0, 5);
-		if (map.size() > 4 && map.ends_with(".vpk"))
+		if (map.ends_with(".vpk"))
 			map.resize(map.size() - 4);
 		return map;
 	}
 
 	bool IsValidMap(const std::string& map) {
-		if (map.empty())
-			return false;
-		if (map.front() == '<')
-			return false;
-		if (map == "lobby")
-			return false;
-		for (unsigned char c : map) {
-			if (!std::isalnum(c) && c != '_')
-				return false;
-		}
-		return true;
+		return !map.empty() && map.front() != '<' && map != "lobby";
 	}
 
-	bool IsValidTriCache(const std::filesystem::path& cache) {
-		if (!std::filesystem::exists(cache))
-			return false;
-		std::error_code ec;
-		const auto sz = std::filesystem::file_size(cache, ec);
-		return !ec && sz > 0 && sz % sizeof(TriangleCombined) == 0;
+	bool IsTri2(const std::filesystem::path& path) {
+		std::ifstream in(path, std::ios::binary);
+		char magic[4]{};
+		in.read(magic, 4);
+		return std::memcmp(magic, "TRI2", 4) == 0;
 	}
-} // namespace
+}
 
 VisCheckManager& VisCheckManager::Get() {
 	static VisCheckManager inst;
@@ -50,11 +39,8 @@ VisCheckManager& VisCheckManager::Get() {
 
 void VisCheckManager::OnMapChanged(const char* mapName) {
 	const auto map = TrimMapName(mapName);
-	if (!IsValidMap(map)) {
-		LOGF(VERBOSE, "VisCheck: skipping invalid map '{}'", map.empty() ? "<empty>" : map);
+	if (!IsValidMap(map))
 		return;
-	}
-
 	Get().LoadAsync(map);
 }
 
@@ -64,16 +50,13 @@ bool VisCheckManager::IsReady() {
 	return self.vis_ && self.vis_->IsReady();
 }
 
-bool VisCheckManager::IsVisible(const Vec3_t& from, const Vec3_t& to) {
+bool VisCheckManager::IsVisible(const Vec3_t& from, const Vec3_t& to, float weaponPen) {
 	auto& self = Get();
 	std::shared_lock lock(self.mtx_);
 	if (!self.vis_ || !self.vis_->IsReady())
 		return false;
 
-	return self.vis_->IsPointVisible(
-		{ from.x, from.y, from.z },
-		{ to.x, to.y, to.z }
-	);
+	return self.vis_->Visible({ from.x, from.y, from.z }, { to.x, to.y, to.z }, weaponPen);
 }
 
 void VisCheckManager::SetVisCheck(std::unique_ptr<VisCheck> vis) {
@@ -95,33 +78,22 @@ void VisCheckManager::LoadAsync(std::string map) {
 	loading_ = true;
 	worker_ = std::thread([this, map = std::move(map)]() {
 		const auto cache = PathUtil::MapCachePath(map);
-		bool ok = IsValidTriCache(cache);
-
-		if (!ok) {
-			std::error_code ec;
-			if (std::filesystem::exists(cache))
-				std::filesystem::remove(cache, ec);
-
+		if (!IsTri2(cache)) {
+			std::filesystem::remove(cache);
 			if (const auto err = VpkMapExtractor::EnsureTriCache(map))
 				LOGF(WARNING, "VisCheck: {} — spotted ESP disabled", *err);
-			ok = IsValidTriCache(cache);
 		}
 
-		if (ok) {
+		if (IsTri2(cache)) {
 			auto vis = std::make_unique<VisCheck>(cache.string());
 			if (vis->IsReady()) {
-				const auto triCount = vis->TriangleCount();
+				LOGF(INFO, "VisCheck: loaded map '{}' ({} triangles)", map, vis->TriangleCount());
 				SetVisCheck(std::move(vis));
-				LOGF(INFO, "VisCheck: loaded map '{}' ({} triangles)", map, triCount);
-			}
-			else {
+			} else {
+				std::filesystem::remove(cache);
 				SetVisCheck(nullptr);
-				std::error_code ec;
-				std::filesystem::remove(cache, ec);
-				LOGF(WARNING, "VisCheck: tri cache invalid for '{}'", map);
 			}
-		}
-		else
+		} else
 			SetVisCheck(nullptr);
 
 		loading_ = false;

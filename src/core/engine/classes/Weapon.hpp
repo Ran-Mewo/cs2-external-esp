@@ -15,6 +15,7 @@ public:
 	std::string name;
 	int32_t ammo;
 	bool is_reloading;
+	float penetration = 0.f;
 
 private:
 	const char* ToString() const;

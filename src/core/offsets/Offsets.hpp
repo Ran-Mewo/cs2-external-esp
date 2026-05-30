@@ -52,6 +52,14 @@ namespace offsets
 		constexpr std::ptrdiff_t m_iShotsFired = 0x1C64; // int32
 	}
 
+	namespace entity {
+		constexpr std::ptrdiff_t m_nSubclassID = 0x380; // CUtlStringToken - C_BaseEntity
+	}
+
+	namespace weaponVData {
+		constexpr std::ptrdiff_t m_flPenetration = 0x834; // float32 - CCSWeaponBaseVData
+	}
+
 	namespace aimPunch {
 		constexpr std::ptrdiff_t m_predictableBaseAngle = 0x50; // QAngle - CCSPlayer_AimPunchServices
 		constexpr std::ptrdiff_t m_unpredictableBaseTick = 0xA0; // GameTick_t

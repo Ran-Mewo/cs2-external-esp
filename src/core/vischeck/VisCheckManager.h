@@ -13,7 +13,7 @@ class VisCheckManager {
 public:
     static void OnMapChanged(const char* mapName);
     static bool IsReady();
-    static bool IsVisible(const Vec3_t& from, const Vec3_t& to);
+    static bool IsVisible(const Vec3_t& from, const Vec3_t& to, float weaponPen = 0.f);
 
 private:
     static VisCheckManager& Get();

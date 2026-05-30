@@ -173,7 +173,7 @@ void Menu::RenderImpl() {
 					ImGui::Spacing();
 
 					if (ImGui::CollapsingHeader("Spotted")) {
-						ImGui::SetItemTooltip("Highlights players visible to you (line of sight)");
+						ImGui::SetItemTooltip("Highlights players visible to you (line of sight) or can be wallbanged");
 						ImGui::PushID("Spotted");
 
 						ImGui::Checkbox("Box", &cfg::esp::spotted::box);
