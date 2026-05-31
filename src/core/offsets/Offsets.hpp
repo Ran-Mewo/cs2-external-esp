@@ -33,7 +33,6 @@ namespace offsets
 		constexpr std::ptrdiff_t m_vecAbsVelocity = 0x3FC; // Vector
 
 		constexpr std::ptrdiff_t m_pGameSceneNode = 0x330; // CGameSceneNode*
-		constexpr std::ptrdiff_t m_pClippingWeapon = 0x3DC0; // C_CSWeaponBase*
 		
 		constexpr std::ptrdiff_t m_entitySpottedState = 0x1C38; // EntitySpottedState_t
 		constexpr std::ptrdiff_t m_bSpottedByMask = 0xC; // uint32[2] - EntitySpottedState_t
@@ -53,11 +52,11 @@ namespace offsets
 	}
 
 	namespace entity {
-		constexpr std::ptrdiff_t m_nSubclassID = 0x380; // CUtlStringToken - C_BaseEntity
+		constexpr std::ptrdiff_t m_nSubclassID = 0x380; // CUtlStringToken - C_BaseEntity; vdata ptr at +0x8
 	}
 
 	namespace weaponVData {
-		constexpr std::ptrdiff_t m_flPenetration = 0x834; // float32 - CCSWeaponBaseVData
+		constexpr std::ptrdiff_t m_flPenetration = 0x834; // float32 - CCSWeaponBaseVData (buy-menu 50–300)
 	}
 
 	namespace aimPunch {

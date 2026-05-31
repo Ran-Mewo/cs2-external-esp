@@ -30,6 +30,8 @@ private:
 
 	std::unique_ptr<BVHNode> BuildBVH(const std::vector<TriangleCombined>& tris);
 	void CollectHits(const BVHNode* node, const Vector3& origin, const Vector3& dir, float maxDist, std::vector<std::pair<float, uint16_t>>& out) const;
+	float MatCost(uint16_t attr) const;
 	float SurfaceCost(uint16_t entry, uint16_t exit) const;
+	bool Trace(const Vector3& from, const Vector3& to, float weaponPen) const;
 	static bool RayTriangle(const Vector3& origin, const Vector3& dir, const TriangleCombined& tri, float& t);
 };

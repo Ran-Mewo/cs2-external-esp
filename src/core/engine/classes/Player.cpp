@@ -167,7 +167,7 @@ bool Player::UpdateWeapon() {
 	if (!weapon_services)
 		return false;
 
-	auto active_weapon_index = p->read<int>(weapon_services + offsets::pawn::m_hActiveWeapon);
+	auto active_weapon_index = p->read<uint32_t>(weapon_services + offsets::pawn::m_hActiveWeapon);
 
 	if (!active_weapon_index)
 		return false;

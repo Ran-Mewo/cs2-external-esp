@@ -105,17 +105,18 @@ void VisCheck::CollectHits(const BVHNode* node, const Vector3& origin, const Vec
 		CollectHits(node->right.get(), origin, dir, maxDist, out);
 }
 
-float VisCheck::SurfaceCost(uint16_t entry, uint16_t exit) const {
-	auto cost = [this](uint16_t attr) {
-		if (attr >= penCosts_.size())
-			return 150.f;
-		const float c = penCosts_[attr];
-		return c >= 900.f ? 999.f : c;
-	};
-	return entry == exit ? cost(entry) : (cost(entry) + cost(exit)) * 0.5f;
+float VisCheck::MatCost(uint16_t attr) const {
+	if (attr >= penCosts_.size())
+		return 220.f;
+	const float c = penCosts_[attr];
+	return c >= 900.f ? 999.f : c;
 }
 
-bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) const {
+float VisCheck::SurfaceCost(uint16_t entry, uint16_t exit) const {
+	return entry == exit ? MatCost(entry) : (MatCost(entry) + MatCost(exit)) * 0.5f;
+}
+
+bool VisCheck::Trace(const Vector3& from, const Vector3& to, float weaponPen) const {
 	if (!root_)
 		return false;
 
@@ -126,32 +127,55 @@ bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) 
 
 	const Vector3 dir = { delta.x / dist, delta.y / dist, delta.z / dist };
 
+	const float pad = std::min(16.f, dist * 0.08f);
+	const Vector3 origin = { from.x + dir.x * pad, from.y + dir.y * pad, from.z + dir.z * pad };
+	const float rayLen = dist - pad;
+	if (rayLen < 1.f)
+		return true;
+
 	std::vector<std::pair<float, uint16_t>> hits;
-	CollectHits(root_.get(), from, dir, dist, hits);
+	CollectHits(root_.get(), origin, dir, rayLen, hits);
 	if (hits.empty())
 		return weaponPen <= 0.f;
 
 	std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
-	// Ignore hits in the target's hull zone — player bones aren't in the BVH mesh.
-	constexpr float kNearTarget = 12.f;
-	std::vector<std::pair<float, uint16_t>> block;
-	block.reserve(hits.size());
+	std::vector<std::pair<float, uint16_t>> merged;
+	merged.reserve(hits.size());
 	for (const auto& h : hits) {
-		if (h.first < dist - kNearTarget)
+		if (!merged.empty() && h.first - merged.back().first < 1.5f)
+			continue;
+		merged.push_back(h);
+	}
+
+	constexpr float kNearTarget = 8.f;
+	std::vector<std::pair<float, uint16_t>> block;
+	block.reserve(merged.size());
+	for (const auto& h : merged) {
+		if (h.first < rayLen - kNearTarget)
 			block.push_back(h);
 	}
 
 	if (block.empty())
-		return true;
+		return weaponPen <= 0.f;
 
 	if (weaponPen <= 0.f)
 		return false;
 
+	if (block.size() >= 2 && block.back().first - block.front().first > 42.f)
+		return false;
+
+	if (MatCost(block.front().second) >= 250.f || MatCost(block.back().second) >= 250.f)
+		return false;
+
 	float budget = weaponPen;
 	for (size_t i = 0; i < block.size();) {
-		if (i + 1 >= block.size())
-			return false;
+		if (i + 1 >= block.size()) {
+			if (block.size() != 1 || block.back().first - block.front().first > 22.f)
+				return false;
+			const float slab = SurfaceCost(block[i].second, block[i].second);
+			return MatCost(block[i].second) <= 85.f && slab < 95.f && slab <= budget;
+		}
 
 		const float cost = SurfaceCost(block[i].second, block[i + 1].second);
 		if (cost >= 900.f || cost > budget)
@@ -161,6 +185,19 @@ bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) 
 		i += 2;
 	}
 	return true;
+}
+
+bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) const {
+	if (!Trace(from, to, weaponPen))
+		return false;
+
+	const float dx = to.x - from.x, dy = to.y - from.y;
+	if (dx * dx + dy * dy < 90.f)
+		return true;
+
+	const float drop = std::min(36.f, std::max(0.f, from.z - to.z) * 0.45f);
+	const Vector3 flat = { to.x, to.y, from.z - drop };
+	return Trace(from, flat, weaponPen);
 }
 
 bool VisCheck::RayTriangle(const Vector3& origin, const Vector3& dir, const TriangleCombined& tri, float& t) {

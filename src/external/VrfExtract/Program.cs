@@ -121,7 +121,10 @@ static uint ParseUInt(string s) => s.StartsWith("0x", StringComparison.OrdinalIg
 
 static float PenCost(string name, float mod) {
     var n = name.ToLowerInvariant();
-    if (n.Contains("concrete") || n.Contains("brick") || n.Contains("rock")) return 999f;
+    if (n.Contains("concrete") || n.Contains("brick") || n.Contains("rock") || n.Contains("stone")
+        || n.Contains("plaster") || n.Contains("cement") || n.Contains("solid") || n.Contains("ground")
+        || n.Contains("gravel") || n.Contains("asphalt") || n.Contains("pavement") || n.Contains("dirt"))
+        return 999f;
     return Math.Min(90f / Math.Max(mod, 0.1f), 250f);
 }
 

@@ -48,7 +48,7 @@ void Esp::RenderImpl(const Snapshot& snapshot) {
 	static uint8_t visHold[64]{};
 
 	const float weaponPen = local.weapon.penetration;
-	static constexpr std::array kSpottedBones{ bone_index::head, bone_index::neck, bone_index::chest, bone_index::shoulder_L, bone_index::shoulder_R };
+	static constexpr std::array kSpottedBones{ bone_index::head, bone_index::neck, bone_index::chest };
 
 	for (auto& player : players) {
 		if (!player.alive)

@@ -6,44 +6,23 @@
 #include "core/engine/types/Weapons.hpp"
 
 namespace {
-	float DefaultPenetration(short id) {
-		switch (id) {
-		case weapon_awp: case weapon_ssg08: case weapon_scar20: case weapon_g3sg1:
-			return 280.f;
-		case weapon_deagle: case weapon_revolver:
-			return 90.f;
-		case weapon_ak47: case weapon_m4a1: case weapon_m4a1_silencer: case weapon_aug:
-		case weapon_famas: case weapon_galilar: case weapon_sg556: case weapon_m249: case weapon_negev:
-			return 200.f;
-		case weapon_glock: case weapon_usp_silencer: case weapon_hkp2000: case weapon_elite:
-		case weapon_fiveseven: case weapon_tec9: case weapon_cz75a: case weapon_p250:
-		case weapon_mac10: case weapon_mp9: case weapon_mp7: case weapon_ump45: case weapon_bizon:
-		case weapon_p90: case weapon_nova: case weapon_xm1014: case weapon_mag7: case weapon_sawedoff:
-			return 35.f;
-		default:
-			return 55.f;
+	// CCSWeaponBaseVData::m_flPenetration — buy-menu scale (50–300) or tier (e.g. 2.0 → 200).
+	float ScalePenetration(float raw) {
+		if (raw >= 50.f && raw <= 300.f)
+			return raw;
+		if (raw > 0.f && raw <= 4.f) {
+			const float scaled = raw * 100.f;
+			return scaled > 300.f ? 300.f : scaled;
 		}
-	}
-
-	float NormalizePenetration(float pen, short id) {
-		if (pen <= 0.f)
-			return DefaultPenetration(id);
-		if (pen < 12.f)
-			pen *= 25.f;
-		return std::min(pen, 300.f);
+		return 0.f;
 	}
 }
 
 bool Weapon::Update() {
 	auto p = Engine::GetProcess();
-    auto client = Engine::GetClient();
-	if (!p)
+	if (!p || !entity_list)
 		return false;
 
-    if (!entity_list)
-        return false;
-
-    // Similar to Player::GetPawn()
     uintptr_t bucket_ptr = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * ((slot_index & 0x7FFF) >> 9));
     if (!bucket_ptr)
         return false;
@@ -53,15 +32,14 @@ bool Weapon::Update() {
 		return false;
 
 	this->item_index = p->read<short>(weapon_ptr + offsets::pawn::m_AttributeManager + offsets::pawn::m_Item + offsets::pawn::m_iItemDefinitionIndex);
-
 	if (!this->item_index)
 		return false;
 
 	const uintptr_t vdata = p->read<uintptr_t>(weapon_ptr + offsets::entity::m_nSubclassID + 0x8);
 	const float raw = vdata ? p->read<float>(vdata + offsets::weaponVData::m_flPenetration) : 0.f;
-	this->penetration = NormalizePenetration(raw, this->item_index);
+	this->penetration = ScalePenetration(raw);
 
-    this->name = ToString();	
+    this->name = ToString();
     this->ammo = p->read<int32_t>(weapon_ptr + offsets::pawn::m_iClip1);
     this->is_reloading = p->read<bool>(weapon_ptr + offsets::pawn::m_bInReload);
 
