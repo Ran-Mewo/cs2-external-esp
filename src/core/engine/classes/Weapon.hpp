@@ -1,26 +1,24 @@
 #pragma once
 #include "core/engine/types/Weapons.hpp"
 
-class Weapon
-{
+class Weapon {
 public:
+	Weapon() = default;
 	Weapon(uintptr_t entity_list, int slot_index)
 		: entity_list(entity_list), slot_index(slot_index) {}
-	Weapon() 
-		: item_index(-1), name("Invalid"), slot_index(0), entity_list(0){}
 
 	bool Update();
-public:
-	short item_index;
-	std::string name;
-	int32_t ammo;
-	bool is_reloading;
+
+	short item_index = -1;
+	std::string name = "Invalid";
+	int32_t ammo = 0;
+	bool is_reloading = false;
 	float penetration = 0.f;
 
 private:
 	const char* ToString() const;
 
-	int slot_index;
-	uintptr_t entity_list;
+	uintptr_t entity_list = 0;
+	int slot_index = 0;
 };
 

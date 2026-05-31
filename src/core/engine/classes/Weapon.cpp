@@ -5,16 +5,26 @@
 
 #include "core/engine/types/Weapons.hpp"
 
+#include <cstring>
+
 namespace {
 	// CCSWeaponBaseVData::m_flPenetration — buy-menu scale (50–300) or tier (e.g. 2.0 → 200).
 	float ScalePenetration(float raw) {
 		if (raw >= 50.f && raw <= 300.f)
 			return raw;
-		if (raw > 0.f && raw <= 4.f) {
-			const float scaled = raw * 100.f;
-			return scaled > 300.f ? 300.f : scaled;
-		}
+		if (raw > 0.f && raw <= 4.f)
+			return std::min(raw * 100.f, 300.f);
 		return 0.f;
+	}
+
+	constexpr std::ptrdiff_t kBase = 0x380;
+	thread_local std::byte buf[0x1800 - kBase];
+
+	template <class T>
+	T at(std::ptrdiff_t off) {
+		T v;
+		std::memcpy(&v, buf + (off - kBase), sizeof(T));
+		return v;
 	}
 }
 
@@ -23,26 +33,25 @@ bool Weapon::Update() {
 	if (!p || !entity_list)
 		return false;
 
-    uintptr_t bucket_ptr = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * ((slot_index & 0x7FFF) >> 9));
-    if (!bucket_ptr)
-        return false;
-
-    uintptr_t weapon_ptr = p->read<uintptr_t>(bucket_ptr + 0x70 * (slot_index & 0x1FF));
-	if (!weapon_ptr)
+	// Similar to Player::GetPawn()
+	const auto bucket = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * ((slot_index & 0x7FFF) >> 9));
+	if (!bucket)
 		return false;
 
-	this->item_index = p->read<short>(weapon_ptr + offsets::pawn::m_AttributeManager + offsets::pawn::m_Item + offsets::pawn::m_iItemDefinitionIndex);
-	if (!this->item_index)
+	const auto weapon = p->read<uintptr_t>(bucket + 0x70 * (slot_index & 0x1FF));
+	if (!weapon || !p->read_raw(weapon + kBase, buf, sizeof(buf)))
 		return false;
 
-	const uintptr_t vdata = p->read<uintptr_t>(weapon_ptr + offsets::entity::m_nSubclassID + 0x8);
-	const float raw = vdata ? p->read<float>(vdata + offsets::weaponVData::m_flPenetration) : 0.f;
-	this->penetration = ScalePenetration(raw);
+	item_index = at<short>(offsets::pawn::m_AttributeManager + offsets::pawn::m_Item + offsets::pawn::m_iItemDefinitionIndex);
+	if (!item_index)
+		return false;
 
-    this->name = ToString();
-    this->ammo = p->read<int32_t>(weapon_ptr + offsets::pawn::m_iClip1);
-    this->is_reloading = p->read<bool>(weapon_ptr + offsets::pawn::m_bInReload);
+	const auto vdata = at<uintptr_t>(offsets::entity::m_nSubclassID + 0x8);
+	penetration = ScalePenetration(vdata ? p->read<float>(vdata + offsets::weaponVData::m_flPenetration) : 0.f);
 
+	name         = ToString();
+	ammo         = at<int32_t>(offsets::pawn::m_iClip1);
+	is_reloading = at<bool>(offsets::pawn::m_bInReload);
 	return true;
 }
 

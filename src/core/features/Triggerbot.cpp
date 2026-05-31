@@ -22,77 +22,38 @@ namespace {
 		return (GetAsyncKeyState(VK_XBUTTON1) & 0x8000) || (GetAsyncKeyState(VK_XBUTTON2) & 0x8000);
 	}
 
-	bool GameReady(HWND hwnd) {
-		return hwnd && IsWindow(hwnd) && !IsIconic(hwnd);
-	}
+	bool GameReady(HWND hwnd) { return hwnd && IsWindow(hwnd) && !IsIconic(hwnd); }
 
 	std::mt19937& Rng() {
 		static thread_local std::mt19937 g{ std::random_device{}() };
 		return g;
 	}
 
-	float RandF(float lo, float hi) {
-		return std::uniform_real_distribution{ lo, hi }(Rng());
-	}
-
-	int RandMs(int lo, int hi) {
-		return std::uniform_int_distribution{ lo, hi }(Rng());
-	}
-
-	int ReactionMs() {
-		return RandMs(55, 115);
-	}
+	float RandF(float lo, float hi) { return std::uniform_real_distribution{ lo, hi }(Rng()); }
+	int   RandI(int lo, int hi)     { return std::uniform_int_distribution{ lo, hi }(Rng()); }
 
 	// Snipers lose first-shot accuracy while the view is moving, so we never auto-aim them.
 	bool IsSniper(short id) {
 		return id == weapon_awp || id == weapon_ssg08 || id == weapon_scar20 || id == weapon_g3sg1;
 	}
 
-	uintptr_t ResolveEnt(uintptr_t entity_list, int32_t ent_index) {
-		if (ent_index <= 0 || !entity_list)
+	uintptr_t ResolveEnt(const std::shared_ptr<pProcess>& proc, uintptr_t entity_list, int32_t idx) {
+		if (idx <= 0 || !entity_list)
 			return 0;
-
-		auto proc = Engine::GetProcess();
-		if (!proc)
-			return 0;
-
-		auto bucket = proc->read<uintptr_t>(entity_list + 0x10 + 0x8 * (ent_index >> 9));
-		if (!bucket)
-			return 0;
-
-		return proc->read<uintptr_t>(bucket + 0x70 * (ent_index & 0x1FF));
-	}
-
-	uintptr_t ResolvePawnHandle(uintptr_t entity_list, uint32_t handle) {
-		if (!handle || !entity_list)
-			return 0;
-		return ResolveEnt(entity_list, handle & 0x7FFF);
-	}
-
-	uintptr_t LocalPawn(const std::shared_ptr<pProcess>& proc, const ProcessModule& client, const Snapshot& snap) {
-		if (snap.local.pawn_addr)
-			return snap.local.pawn_addr;
-
-		const uintptr_t controller = proc->read<uintptr_t>(client.base + offsets::localPlayerController);
-		if (!controller)
-			return 0;
-
-		const uintptr_t entity_list = proc->read<uintptr_t>(client.base + offsets::entityList);
-		const uint32_t handle = proc->read<uint32_t>(controller + offsets::controller::m_hPawn);
-		return ResolvePawnHandle(entity_list, handle);
+		const auto bucket = proc->read<uintptr_t>(entity_list + 0x10 + 0x8 * (idx >> 9));
+		return bucket ? proc->read<uintptr_t>(bucket + 0x70 * (idx & 0x1FF)) : 0;
 	}
 
 	bool ValidEnemy(const std::shared_ptr<pProcess>& proc, uintptr_t pawn, int local_team) {
-		const int hp = proc->read<int>(pawn + offsets::pawn::m_iHealth);
+		const int hp   = proc->read<int>(pawn + offsets::pawn::m_iHealth);
 		const int team = proc->read<int>(pawn + offsets::pawn::m_iTeamNum);
 		return hp > 0 && hp <= 100 && team != local_team;
 	}
 
 	const Player* FindPlayer(const Snapshot& snap, uintptr_t pawn) {
-		for (const auto& p : snap.players) {
+		for (const auto& p : snap.players)
 			if (p.pawn_addr == pawn)
 				return &p;
-		}
 		return nullptr;
 	}
 
@@ -106,30 +67,23 @@ namespace {
 		RECT rc{};
 		if (!hwnd || !GetClientRect(hwnd, &rc))
 			return { 1920.f, 1080.f };
-		return { (float)(rc.right - rc.left), (float)(rc.bottom - rc.top) };
+		return { float(rc.right - rc.left), float(rc.bottom - rc.top) };
 	}
 
-	Target CrosshairTarget(const std::shared_ptr<pProcess>& proc, const Snapshot& snap, uintptr_t local_pawn) {
-		const uintptr_t entity_list = proc->read<uintptr_t>(Engine::GetClient().base + offsets::entityList);
-		const int local_team = proc->read<int>(local_pawn + offsets::pawn::m_iTeamNum);
-		const int32_t ent_index = proc->read<int32_t>(local_pawn + offsets::pawn::m_iIDEntIndex);
-
-		if (ent_index <= 0)
+	Target CrosshairTarget(const std::shared_ptr<pProcess>& proc, const Snapshot& snap) {
+		const auto idx = proc->read<int32_t>(snap.local.pawn_addr + offsets::pawn::m_iIDEntIndex);
+		if (idx <= 0)
 			return {};
-
-		const uintptr_t pawn = ResolveEnt(entity_list, ent_index);
-		if (!pawn || !ValidEnemy(proc, pawn, local_team))
+		const auto pawn = ResolveEnt(proc, snap.game.entity_list, idx);
+		if (!pawn || !ValidEnemy(proc, pawn, snap.local.team))
 			return {};
-
 		return { pawn, FindPlayer(snap, pawn) };
 	}
 
 	Vec3_t AimPos(const std::shared_ptr<pProcess>& proc, const Player* player, uintptr_t pawn) {
 		if (player)
 			return HeadPos(*player);
-
-		const Vec3_t pos = proc->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin);
-		return pos + Vec3_t{ 0.f, 0.f, 64.f };
+		return proc->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin) + Vec3_t{ 0.f, 0.f, 64.f };
 	}
 
 	void SoftAim(const view_matrix_t& matrix, const Vec2_t& screen, const Vec3_t& head, bool tracking) {
@@ -137,16 +91,16 @@ namespace {
 		if (!matrix.wts(head, screen, target, false))
 			return;
 
-		const float cx = screen.x * 0.5f, cy = screen.y * 0.5f;
-		float px = target.x - cx, py = target.y - cy;
-		const float dist = std::hypot(px, py);
+		float mx = target.x - screen.x * 0.5f;
+		float my = target.y - screen.y * 0.5f;
+		const float dist = std::hypot(mx, my);
 		const float max_px = tracking ? kTrackMaxPx : kFlickMaxPx;
 		if (dist < 1.5f || dist > max_px)
 			return;
 
 		const float t = (tracking ? 0.38f : 0.55f) * RandF(0.9f, 1.1f);
-		float mx = px * t * kPxToMouse;
-		float my = py * t * kPxToMouse;
+		mx *= t * kPxToMouse;
+		my *= t * kPxToMouse;
 
 		// Bias each step sideways so the path arcs and trembles instead of snapping dead-straight.
 		const float curve = RandF(-0.18f, 0.18f);
@@ -160,12 +114,10 @@ namespace {
 			my *= cap / mag;
 		}
 
-		int dx = (int)std::lround(mx);
-		int dy = (int)std::lround(my);
-		if (!dx && std::abs(mx) >= 1.f)
-			dx = mx > 0.f ? 1 : -1;
-		if (!dy && std::abs(my) >= 1.f)
-			dy = my > 0.f ? 1 : -1;
+		int dx = int(std::lround(mx));
+		int dy = int(std::lround(my));
+		if (!dx && std::abs(mx) >= 1.f) dx = mx > 0.f ? 1 : -1;
+		if (!dy && std::abs(my) >= 1.f) dy = my > 0.f ? 1 : -1;
 		if (!dx && !dy)
 			return;
 
@@ -175,19 +127,19 @@ namespace {
 
 	void MouseClick() {
 		INPUT down{ .type = INPUT_MOUSE, .mi = { .dwFlags = MOUSEEVENTF_LEFTDOWN } };
-		INPUT up{ .type = INPUT_MOUSE, .mi = { .dwFlags = MOUSEEVENTF_LEFTUP } };
+		INPUT up{   .type = INPUT_MOUSE, .mi = { .dwFlags = MOUSEEVENTF_LEFTUP } };
 		SendInput(1, &down, sizeof(INPUT));
-		Sleep(RandMs(8, 16));
+		Sleep(RandI(8, 16));
 		SendInput(1, &up, sizeof(INPUT));
 	}
 }
 
 void Triggerbot::Tick(const Snapshot& snap) {
-	static uintptr_t locked_pawn = 0;
+	static uintptr_t locked = 0;
 	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{}, next_aim{};
 
-	auto reset = [&] {
-		locked_pawn = 0;
+	const auto reset = [&] {
+		locked = 0;
 		ready_at = next_shot = miss_since = next_aim = {};
 	};
 
@@ -197,25 +149,19 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	}
 
 	auto proc = Engine::GetProcess();
-	const auto client = Engine::GetClient();
-	if (!proc || !client.base || !GameReady(proc->hwnd_))
-		return;
-
-	const uintptr_t local_pawn = LocalPawn(proc, client, snap);
-	if (!local_pawn)
+	if (!proc || !GameReady(proc->hwnd_) || !snap.local.pawn_addr)
 		return;
 
 	const auto now = steady_clock::now();
-	const int local_team = proc->read<int>(local_pawn + offsets::pawn::m_iTeamNum);
-	const Target crosshair = CrosshairTarget(proc, snap, local_pawn);
+	const auto crosshair = CrosshairTarget(proc, snap);
 
 	if (crosshair.pawn) {
-		if (crosshair.pawn != locked_pawn) {
-			locked_pawn = crosshair.pawn;
-			ready_at = now + milliseconds(ReactionMs());
+		if (crosshair.pawn != locked) {
+			locked = crosshair.pawn;
+			ready_at = now + milliseconds(RandI(55, 115));
 		}
 		miss_since = {};
-	} else if (locked_pawn) {
+	} else if (locked) {
 		if (miss_since == steady_clock::time_point{})
 			miss_since = now;
 		if (now - miss_since >= kDropTarget) {
@@ -226,24 +172,24 @@ void Triggerbot::Tick(const Snapshot& snap) {
 		return;
 	}
 
-	if (!ValidEnemy(proc, locked_pawn, local_team)) {
+	if (!ValidEnemy(proc, locked, snap.local.team)) {
 		reset();
 		return;
 	}
 
-	const Player* track = FindPlayer(snap, locked_pawn);
-	const bool on_crosshair = crosshair.pawn == locked_pawn;
+	const bool on_crosshair = crosshair.pawn == locked;
 
 	if (cfg::triggerbot::soft_aim && !IsSniper(snap.local.weapon.item_index) && now >= next_aim) {
-		SoftAim(snap.game.view_matrix, ScreenSize(proc->hwnd_), AimPos(proc, track, locked_pawn), !on_crosshair);
-		next_aim = now + milliseconds(RandMs(5, 10));
+		SoftAim(snap.game.view_matrix, ScreenSize(proc->hwnd_),
+			AimPos(proc, FindPlayer(snap, locked), locked), !on_crosshair);
+		next_aim = now + milliseconds(RandI(5, 10));
 	}
 
 	if (!on_crosshair || now < ready_at || now < next_shot)
 		return;
 
 	MouseClick();
-	next_shot = now + milliseconds(RandMs(100, 220));
+	next_shot = now + milliseconds(RandI(100, 220));
 }
 
 bool Triggerbot::IsHeld() {

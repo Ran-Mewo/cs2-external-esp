@@ -25,53 +25,38 @@ void Esp::RenderImpl(const Snapshot& snapshot) {
 	if (!cfg::enabled)
 		return;
 
-	auto& game = snapshot.game;
-	auto& bomb = snapshot.bomb;
-	auto& local = snapshot.local;
-	auto& players = snapshot.players;
-	
-	ImGui::PushFont(this->font);
+	const auto& local = snapshot.local;
 
-	this->io = ImGui::GetIO();
-	this->d = ImGui::GetBackgroundDrawList();
+	ImGui::PushFont(font);
+	io = ImGui::GetIO();
+	d = ImGui::GetBackgroundDrawList();
+	matrix = snapshot.game.view_matrix;
 
-	this->matrix = game.view_matrix;
+	RenderBomb(local, snapshot.bomb);
 
-	RenderBomb(local, bomb);
+	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton
+		|| cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
+	static uint8_t vis_hold[64]{};
 
-	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
-	static uint8_t visHold[64]{};
-
-	for (auto& player : players) {
-		if (!player.alive)
+	for (auto& player : snapshot.players) {
+		if (!player.alive || player.localplayer)
 			continue;
 
-		if (player.localplayer)
-			continue;
-
-		bool mate = player.team == local.team;
-
+		const bool mate = player.team == local.team;
 		if (!cfg::esp::team && mate)
 			continue;
 
-		
 		// Are we spectating the player in first person? then dont render
 		// TODO: Exception here when spectating someone
-		if (
-			local.observer_services.target == player.pawn_controller_addr
-			&& local.observer_services.mode == ObserverMode::First
-		)
+		if (local.observer_services.target == player.pawn_controller_addr
+			&& local.observer_services.mode == ObserverMode::First)
 			continue;
 
 		bool visible = false;
 		if (any_spotted) {
-			auto& visibilityHold = visHold[player.index & 63];
-			if (player.spotted_can_engage)
-				visibilityHold = 6;
-			else if (visibilityHold)
-				--visibilityHold;
-
-			visible = visibilityHold > 0;
+			auto& hold = vis_hold[player.index & 63];
+			hold = player.spotted_can_engage ? 6 : (hold ? hold - 1 : 0);
+			visible = hold > 0;
 		}
 
 		RenderPlayerTracers(local, player, mate);

@@ -1,32 +1,42 @@
 #include "Player.hpp"
 
+#include <cstring>
+
 #include "Weapon.hpp"
 #include "config/Current.hpp"
 #include "core/engine/cache/Cache.hpp"
 #include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
-
 #include "core/engine/classes/ObserverServices.hpp"
 
 namespace {
-	bool NeedsBones() {
-		if (cfg::esp::skeleton || cfg::esp::head_tracker || cfg::esp::head_tracker_eye_line)
-			return true;
-		if (cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line)
-			return true;
-		return cfg::triggerbot::enabled && cfg::triggerbot::soft_aim;
+	bool needs_bones() {
+		return cfg::esp::skeleton || cfg::esp::head_tracker || cfg::esp::head_tracker_eye_line
+			|| cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line
+			|| (cfg::triggerbot::enabled && cfg::triggerbot::soft_aim);
 	}
 
-	bool NeedsWeapon() {
-		return cfg::esp::flags::weapon || cfg::esp::flags::ammo || cfg::esp::flags::reloading;
-	}
+	bool needs_weapon() { return cfg::esp::flags::weapon || cfg::esp::flags::ammo || cfg::esp::flags::reloading; }
+	bool needs_name()   { return cfg::esp::flags::name || cfg::world::spectators::enabled; }
 
-	bool NeedsObserver() {
-		return cfg::world::spectators::enabled;
-	}
+	template <std::ptrdiff_t Base, std::size_t Size>
+	struct Block {
+		std::byte data[Size];
 
-	bool NeedsName() {
-		return cfg::esp::flags::name || cfg::world::spectators::enabled;
+		template <class T>
+		T at(std::ptrdiff_t off) const {
+			T v;
+			std::memcpy(&v, data + (off - Base), sizeof(T));
+			return v;
+		}
+
+		const std::byte* bytes(std::ptrdiff_t off) const { return data + (off - Base); }
+	};
+
+	namespace buf {
+		thread_local Block<0x6B0, 0x830 - 0x6B0> ctrl;
+		thread_local Block<0x330, 0x3400 - 0x330> pawn;
+		thread_local bone_data bones[30];
 	}
 }
 
@@ -59,57 +69,51 @@ bool Player::Update() {
 
 bool Player::GetController() {
 	auto p = Engine::GetProcess();
-	auto client = Engine::GetClient();
 
-	this->controller = p->read<DWORD64>(list_entry + (index + 1) * 0x70); // before was 0x78
+	controller = p->read<DWORD64>(list_entry + (index + 1) * 0x70);
+	if (!controller)
+		return false;
 
-	return this->controller != 0;
+	return p->read_raw(controller + 0x6B0, buf::ctrl.data, sizeof(buf::ctrl.data));
 }
 
 bool Player::GetPawn() {
 	auto p = Engine::GetProcess();
-	auto client = Engine::GetClient();
 
-	auto entity_pawn_address = p->read<uintptr_t>(controller + offsets::controller::m_hPawn);
-
-	if (!entity_pawn_address)
+	const auto handle = buf::ctrl.at<uintptr_t>(offsets::controller::m_hPawn);
+	if (!handle)
 		return false;
 
-	this->pawn_controller_addr = entity_pawn_address;
+	pawn_controller_addr = handle;
 
-	auto entity_pawn_list_entry = p->read<uintptr_t>(this->entity_list + 0x10 + 0x8 * ((entity_pawn_address & 0x7FFF) >> 9));
-
-	if (!entity_pawn_list_entry)
+	const auto list = p->read<uintptr_t>(entity_list + 0x10 + 0x8 * ((handle & 0x7FFF) >> 9));
+	if (!list)
 		return false;
 
-	this->pawn = p->read<uintptr_t>(entity_pawn_list_entry + 0x70 * (entity_pawn_address & 0x1FF)); /*0x78*/
-	this->pawn_addr = this->pawn;
+	pawn = p->read<uintptr_t>(list + 0x70 * (handle & 0x1FF));
+	pawn_addr = pawn;
 
-	return this->pawn != 0;
+	return pawn != 0;
 }
 
 bool Player::UpdateController() {
 	auto p = Engine::GetProcess();
 
-	this->steam_id = p->read<uint64_t>(controller + offsets::controller::m_steamID);
-	this->bot = this->steam_id == 0;
+	steam_id    = buf::ctrl.at<uint64_t>(offsets::controller::m_steamID);
+	bot         = steam_id == 0;
+	localplayer = buf::ctrl.at<bool>(offsets::controller::m_bIsLocalPlayerController);
 
-	this->localplayer = p->read<bool>(controller + offsets::controller::m_bIsLocalPlayerController);
-
-	if (NeedsName()) {
-		if (!p->read_raw(controller + offsets::controller::m_iszPlayerName, this->name, sizeof(this->name)))
-			return false;
-	} else {
-		this->name[0] = '\0';
-	}
+	if (needs_name())
+		std::memcpy(name, buf::ctrl.bytes(offsets::controller::m_iszPlayerName), sizeof(name));
+	else
+		name[0] = '\0';
 
 	if (cfg::esp::flags::ping)
-		this->ping = p->read<int>(controller + offsets::controller::m_iPing);
+		ping = buf::ctrl.at<int>(offsets::controller::m_iPing);
 
 	if (cfg::esp::flags::money) {
-		auto money_services = p->read<uintptr_t>(controller + offsets::controller::m_pInGameMoneyServices);
-		if (money_services)
-			this->money = p->read<int>(money_services + offsets::controller::m_iAccount);
+		if (const auto svc = buf::ctrl.at<uintptr_t>(offsets::controller::m_pInGameMoneyServices))
+			money = p->read<int>(svc + offsets::controller::m_iAccount);
 	}
 
 	return true;
@@ -118,80 +122,69 @@ bool Player::UpdateController() {
 bool Player::UpdatePawn() {
 	auto p = Engine::GetProcess();
 
-	this->health = p->read<int>(pawn + offsets::pawn::m_iHealth);
-	this->alive = health != 0;
-
-	if (this->health > 255 || this->health < 0)
-		LOGF(FATAL,
-			"Health seems to have a random value (over 100 or under 0) with a value of ({}). Game has probably updated pawn structure",
-			this->health
-		);
-
-	if (localplayer || NeedsObserver())
-		UpdateObserverServices();
-
-	if (!alive) // No need to continue 
-		return true;
-
-	this->pos = p->read<Vec3_t>(pawn + offsets::pawn::m_vOldOrigin);
-	this->view_offset_z = p->read<float>(pawn + offsets::pawn::m_vecViewOffsetZ);
-	this->eye_angles = p->read<Vec3_t>(pawn + offsets::pawn::m_angEyeAngles);
-
-	if (this->pos.zero())
+	if (!p->read_raw(pawn + 0x330, buf::pawn.data, sizeof(buf::pawn.data)))
 		return false;
 
-	this->vel = p->read<Vec3_t>(pawn + offsets::pawn::m_vecAbsVelocity);
+	health = buf::pawn.at<int>(offsets::pawn::m_iHealth);
+	alive  = health != 0;
 
-	this->team = p->read<uint8_t>(pawn + offsets::pawn::m_iTeamNum);
+	if (health < 0 || health > 255)
+		LOGF(FATAL, "Health out of range ({}). Game probably updated pawn structure", health);
 
-	this->armor = p->read<int>(pawn + offsets::pawn::m_ArmorValue);
-	this->defusing = p->read<bool>(pawn + offsets::pawn::m_bIsDefusing);
-	this->flashed = p->read<float>(pawn + offsets::pawn::m_flFlashOverlayAlpha) > 0;
-	this->scoped = p->read<bool>(pawn + offsets::pawn::m_bIsScoped);
+	if (localplayer || cfg::world::spectators::enabled)
+		UpdateObserverServices();
+
+	if (!alive)
+		return true;
+
+	pos = buf::pawn.at<Vec3_t>(offsets::pawn::m_vOldOrigin);
+	if (pos.zero())
+		return false;
+
+	view_offset_z = buf::pawn.at<float>(offsets::pawn::m_vecViewOffsetZ);
+	eye_angles    = buf::pawn.at<Vec3_t>(offsets::pawn::m_angEyeAngles);
+	vel           = buf::pawn.at<Vec3_t>(offsets::pawn::m_vecAbsVelocity);
+	team          = buf::pawn.at<uint8_t>(offsets::pawn::m_iTeamNum);
+	armor         = buf::pawn.at<int>(offsets::pawn::m_ArmorValue);
+	defusing      = buf::pawn.at<bool>(offsets::pawn::m_bIsDefusing);
+	scoped        = buf::pawn.at<bool>(offsets::pawn::m_bIsScoped);
+	flashed       = buf::pawn.at<float>(offsets::pawn::m_flFlashOverlayAlpha) > 0;
 
 	if (localplayer)
-		crosshair_ent_index = p->read<int32_t>(pawn + offsets::pawn::m_iIDEntIndex);
+		crosshair_ent_index = buf::pawn.at<int32_t>(offsets::pawn::m_iIDEntIndex);
 
-	if (NeedsBones() && Cache::ShouldRefreshBones()) {
+	if (needs_bones() && Cache::ShouldRefreshBones()) {
 		if (!UpdateSkeleton()) {
 			LOGF(FATAL, "Failed to update skeleton");
 			return false;
 		}
-	} else if (!NeedsBones()) {
+	} else if (!needs_bones()) {
 		bone_list.clear();
 	}
 
-	if (localplayer || NeedsWeapon()) {
-		if (!UpdateWeapon())
-			return false;
-	} else {
-		weapon = {};
-		ammo = -1;
-		is_reloading = false;
-	}
+	if (localplayer || needs_weapon())
+		return UpdateWeapon();
 
+	weapon = {};
+	ammo = -1;
+	is_reloading = false;
 	return true;
 }
 
 bool Player::UpdateSkeleton() {
 	auto p = Engine::GetProcess();
 
-	auto game_scene = p->read<DWORD64>(this->pawn + offsets::pawn::m_pGameSceneNode);
-
-	if (!game_scene)
+	const auto scene = buf::pawn.at<uintptr_t>(offsets::pawn::m_pGameSceneNode);
+	if (!scene)
 		return false;
 
-	auto bone_array = p->read<DWORD64>(game_scene + (offsets::bone::m_modelState + 0x80));
-
-	if (!bone_array)
+	const auto array = p->read<DWORD64>(scene + offsets::bone::m_modelState + 0x80);
+	if (!array || !p->read_raw(array, buf::bones, sizeof(buf::bones)))
 		return false;
 
-	if (!p->read_raw(bone_array, bones, sizeof(bones)))
-		return false;
-
-	this->bone_list.clear();
-	for (int i = 0; i < 30; i++)
-		this->bone_list.push_back({ bones[i].pos });
+	bone_list.clear();
+	for (const auto& b : buf::bones)
+		bone_list.push_back({ b.pos });
 
 	return true;
 }
@@ -199,70 +192,57 @@ bool Player::UpdateSkeleton() {
 bool Player::UpdateWeapon() {
 	auto p = Engine::GetProcess();
 
-	auto weapon_services = p->read<uintptr_t>(this->pawn + offsets::pawn::m_pWeaponServices);
-
-	if (!weapon_services)
+	const auto svc = buf::pawn.at<uintptr_t>(offsets::pawn::m_pWeaponServices);
+	if (!svc)
 		return false;
 
-	auto active_weapon_index = p->read<uint32_t>(weapon_services + offsets::pawn::m_hActiveWeapon);
-
-	if (!active_weapon_index)
+	const auto slot = p->read<uint32_t>(svc + offsets::pawn::m_hActiveWeapon);
+	if (!slot)
 		return false;
 
-	auto weapon = Weapon(this->entity_list, active_weapon_index);
-
-	if (!weapon.Update())
+	Weapon w(entity_list, slot);
+	if (!w.Update())
 		return false;
 
-	this->weapon = weapon;
-	this->ammo = weapon.ammo;
-	this->is_reloading = weapon.is_reloading;
-
+	weapon = w;
+	ammo = w.ammo;
+	is_reloading = w.is_reloading;
 	return true;
 }
 
 bool Player::GetBounds(view_matrix_t matrix, Vec2_t size, std::pair<Vec2_t, Vec2_t>& bounds) const {
 	Vec2_t origin;
-	bool pt1 = matrix.wts(this->pos, size, origin);
-
+	const bool pt1 = matrix.wts(pos, size, origin);
 
 	Vec3_t pos_top;
-	if (this->bone_list.empty())
-		pos_top = this->pos + Vec3_t(0, 0, 65.f); // 75.f
+	if (bone_list.empty())
+		pos_top = pos + Vec3_t(0, 0, 65.f); // 75.f
 	else
-		pos_top = this->bone_list[bone_index::head].pos;
+		pos_top = bone_list[bone_index::head].pos;
 
 	//auto head_bone = this->bone_list[bone_index::head];
 	//head_bone.pos.z *= 1.09; // little offset to cover the entire head
 	//bone_pos head_bone = origin + ImVec3
 
 	Vec2_t top;
-	bool pt2 = matrix.wts(pos_top, size, top);
+	const bool pt2 = matrix.wts(pos_top, size, top);
 
-	float height = origin.y - top.y;
-	float width = height / 2.4f;
-
-	top.x -= width / 2;
+	const float width = (origin.y - top.y) / 2.4f;
+	top.x    -= width / 2;
 	origin.x += width / 2;
-
-	top.y -= width / 4;
+	top.y    -= width / 4;
 
 	// Top to bottom
 	bounds = { top, origin };
-
 	return pt1 || pt2;
 }
 
 // Does not update if match is started
 bool Player::UpdateObserverServices() {
-	auto p = Engine::GetProcess();
-	if (!p) 
+	const auto address = buf::pawn.at<DWORD64>(offsets::pawn::m_pObserverServices);
+	if (!address)
 		return false;
 
-	DWORD64 address = p->read<DWORD64>(this->pawn + offsets::pawn::m_pObserverServices);
-	if (!address) 
-		return false;
-
-	this->observer_services.SetAddress(address);
-	return this->observer_services.Update();
+	observer_services.SetAddress(address);
+	return observer_services.Update();
 }

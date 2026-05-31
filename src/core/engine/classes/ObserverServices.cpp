@@ -4,18 +4,15 @@
 
 bool ObserverServices::Update() {
 	auto p = Engine::GetProcess();
-
-	if (!p)
+	if (!p || !address)
 		return false;
 
-	auto client = Engine::GetClient();
-
-	if (!this->address) 
+	struct { ObserverMode mode; int target; } block{};
+	if (!p->read_raw(address + offsets::observerServices::m_iObserverMode, &block, sizeof(block)))
 		return false;
 
-	this->mode = p->read<ObserverMode>(this->address + offsets::observerServices::m_iObserverMode);
-	this->target = p->read<int>(this->address + offsets::observerServices::m_hObserverTarget);
-
+	mode = block.mode;
+	target = block.target;
 	return true;
 }
 

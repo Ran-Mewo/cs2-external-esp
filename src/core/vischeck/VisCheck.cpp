@@ -153,6 +153,7 @@ bool VisCheck::Trace(const Vector3& from, const Vector3& to, float weaponPen) co
 		merged.push_back(h);
 	}
 
+	// Ignore hits in the target's hull zone — player bones aren't in the BVH mesh.
 	constexpr float kNearTarget = 8.f;
 	block.reserve(merged.size());
 	for (const auto& h : merged) {

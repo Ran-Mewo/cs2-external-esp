@@ -54,6 +54,9 @@ bool Engine::InitImpl() {
 }
 
 void Engine::Thread() {
+    // TODO: Check build number
+    // uintptr_t number = process->read<uintptr_t>(base_engine.base + offsets::buildNumber);
+
     while (true) {
         auto start = steady_clock::now();
 

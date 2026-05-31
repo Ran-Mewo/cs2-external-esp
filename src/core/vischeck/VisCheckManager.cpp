@@ -6,9 +6,6 @@
 #include "core/engine/classes/Bones.hpp"
 #include "core/engine/classes/Player.hpp"
 
-#include <algorithm>
-#include <array>
-#include <cctype>
 #include <cstring>
 #include <fstream>
 
@@ -34,17 +31,6 @@ namespace {
 		in.read(magic, 4);
 		return std::memcmp(magic, "TRI2", 4) == 0;
 	}
-
-	bool SpottedHeadOnly() {
-		return cfg::esp::spotted::box && !cfg::esp::spotted::skeleton
-			&& !cfg::esp::spotted::head_tracker && !cfg::esp::spotted::head_tracker_eye_line;
-	}
-
-	const Vec3_t& TargetPos(const Player& player) {
-		if (player.bone_list.size() > bone_index::head)
-			return player.bone_list[bone_index::head].pos;
-		return player.pos;
-	}
 }
 
 VisCheckManager& VisCheckManager::Get() {
@@ -54,9 +40,8 @@ VisCheckManager& VisCheckManager::Get() {
 
 void VisCheckManager::OnMapChanged(const char* mapName) {
 	const auto map = TrimMapName(mapName);
-	if (!IsValidMap(map))
-		return;
-	Get().LoadAsync(map);
+	if (IsValidMap(map))
+		Get().LoadAsync(map);
 }
 
 bool VisCheckManager::IsReady() {
@@ -70,48 +55,44 @@ bool VisCheckManager::IsVisible(const Vec3_t& from, const Vec3_t& to, float weap
 	std::shared_lock lock(self.mtx_);
 	if (!self.vis_ || !self.vis_->IsReady())
 		return false;
-
 	return self.vis_->Visible({ from.x, from.y, from.z }, { to.x, to.y, to.z }, weaponPen);
 }
 
 void VisCheckManager::UpdateSpotted(const Player& local, std::vector<Player>& players) {
-	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton
-		|| cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
-	if (!any_spotted)
-		return;
-
 	auto& self = Get();
 	std::shared_lock lock(self.mtx_);
 	if (!self.vis_ || !self.vis_->IsReady())
 		return;
 
 	const Vector3 eye{ local.pos.x, local.pos.y, local.pos.z + local.view_offset_z };
-	const float weaponPen = local.weapon.penetration;
-	const bool head_only = SpottedHeadOnly();
-	static constexpr std::array kBones{ bone_index::head, bone_index::neck, bone_index::chest };
+	const float pen = local.weapon.penetration;
+	const bool head_only = cfg::esp::spotted::box && !cfg::esp::spotted::skeleton
+		&& !cfg::esp::spotted::head_tracker && !cfg::esp::spotted::head_tracker_eye_line;
 
-	for (auto& player : players) {
-		player.spotted_can_engage = false;
-		if (!player.alive || player.localplayer)
+	const auto can_engage = [&](const Vec3_t& p) {
+		return self.vis_->CanEngage(eye, { p.x, p.y, p.z }, pen);
+	};
+
+	for (auto& p : players) {
+		p.spotted_can_engage = false;
+		if (!p.alive || p.localplayer || (!cfg::esp::team && p.team == local.team))
 			continue;
-		if (!cfg::esp::team && player.team == local.team)
-			continue;
+
+		const bool has_head = p.bone_list.size() > bone_index::head;
 
 		if (head_only) {
-			const auto& pos = TargetPos(player);
-			player.spotted_can_engage = self.vis_->CanEngage(eye, { pos.x, pos.y, pos.z }, weaponPen);
+			p.spotted_can_engage = can_engage(has_head ? p.bone_list[bone_index::head].pos : p.pos);
 			continue;
 		}
 
-		if (player.bone_list.size() <= bone_index::head)
+		if (!has_head)
 			continue;
 
-		for (const auto idx : kBones) {
-			if (player.bone_list.size() <= idx)
+		for (const auto idx : { bone_index::head, bone_index::neck, bone_index::chest }) {
+			if (p.bone_list.size() <= idx)
 				continue;
-			const auto& pos = player.bone_list[idx].pos;
-			if (self.vis_->CanEngage(eye, { pos.x, pos.y, pos.z }, weaponPen)) {
-				player.spotted_can_engage = true;
+			if (can_engage(p.bone_list[idx].pos)) {
+				p.spotted_can_engage = true;
 				break;
 			}
 		}
