@@ -1,10 +1,34 @@
 #include "Player.hpp"
 
 #include "Weapon.hpp"
+#include "config/Current.hpp"
+#include "core/engine/cache/Cache.hpp"
 #include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
 
 #include "core/engine/classes/ObserverServices.hpp"
+
+namespace {
+	bool NeedsBones() {
+		if (cfg::esp::skeleton || cfg::esp::head_tracker || cfg::esp::head_tracker_eye_line)
+			return true;
+		if (cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line)
+			return true;
+		return cfg::triggerbot::enabled && cfg::triggerbot::soft_aim;
+	}
+
+	bool NeedsWeapon() {
+		return cfg::esp::flags::weapon || cfg::esp::flags::ammo || cfg::esp::flags::reloading;
+	}
+
+	bool NeedsObserver() {
+		return cfg::world::spectators::enabled;
+	}
+
+	bool NeedsName() {
+		return cfg::esp::flags::name || cfg::world::spectators::enabled;
+	}
+}
 
 bool Player::Update() {
 	if (!Engine::GetProcess())
@@ -70,17 +94,23 @@ bool Player::UpdateController() {
 	this->steam_id = p->read<uint64_t>(controller + offsets::controller::m_steamID);
 	this->bot = this->steam_id == 0;
 
-	// expensive
-	if (!p->read_raw(controller + offsets::controller::m_iszPlayerName, this->name, sizeof(this->name)))
-		return false;
-
 	this->localplayer = p->read<bool>(controller + offsets::controller::m_bIsLocalPlayerController);
-	this->ping = p->read<int>(controller + offsets::controller::m_iPing);
 
-	auto money_services = p->read<uintptr_t>(controller + offsets::controller::m_pInGameMoneyServices);
+	if (NeedsName()) {
+		if (!p->read_raw(controller + offsets::controller::m_iszPlayerName, this->name, sizeof(this->name)))
+			return false;
+	} else {
+		this->name[0] = '\0';
+	}
 
-	if (money_services)
-		this->money = p->read<int>(money_services + offsets::controller::m_iAccount);
+	if (cfg::esp::flags::ping)
+		this->ping = p->read<int>(controller + offsets::controller::m_iPing);
+
+	if (cfg::esp::flags::money) {
+		auto money_services = p->read<uintptr_t>(controller + offsets::controller::m_pInGameMoneyServices);
+		if (money_services)
+			this->money = p->read<int>(money_services + offsets::controller::m_iAccount);
+	}
 
 	return true;
 }
@@ -97,7 +127,8 @@ bool Player::UpdatePawn() {
 			this->health
 		);
 
-	UpdateObserverServices();
+	if (localplayer || NeedsObserver())
+		UpdateObserverServices();
 
 	if (!alive) // No need to continue 
 		return true;
@@ -121,17 +152,23 @@ bool Player::UpdatePawn() {
 	if (localplayer)
 		crosshair_ent_index = p->read<int32_t>(pawn + offsets::pawn::m_iIDEntIndex);
 
-	if (!UpdateSkeleton()) {
-		LOGF(FATAL, "Failed to update skeleton");
-		return false;
+	if (NeedsBones() && Cache::ShouldRefreshBones()) {
+		if (!UpdateSkeleton()) {
+			LOGF(FATAL, "Failed to update skeleton");
+			return false;
+		}
+	} else if (!NeedsBones()) {
+		bone_list.clear();
 	}
 
-	// Shows errors when player just respawned
-	if (!UpdateWeapon()) {
-		//LOGF(FATAL, "Failed to update weapon"); // too verbose
-		return false;
+	if (localplayer || NeedsWeapon()) {
+		if (!UpdateWeapon())
+			return false;
+	} else {
+		weapon = {};
+		ammo = -1;
+		is_reloading = false;
 	}
-
 
 	return true;
 }

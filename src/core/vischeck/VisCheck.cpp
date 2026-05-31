@@ -133,14 +133,19 @@ bool VisCheck::Trace(const Vector3& from, const Vector3& to, float weaponPen) co
 	if (rayLen < 1.f)
 		return true;
 
-	std::vector<std::pair<float, uint16_t>> hits;
+	thread_local std::vector<std::pair<float, uint16_t>> hits;
+	thread_local std::vector<std::pair<float, uint16_t>> merged;
+	thread_local std::vector<std::pair<float, uint16_t>> block;
+	hits.clear();
+	merged.clear();
+	block.clear();
+
 	CollectHits(root_.get(), origin, dir, rayLen, hits);
 	if (hits.empty())
 		return weaponPen <= 0.f;
 
 	std::sort(hits.begin(), hits.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
 
-	std::vector<std::pair<float, uint16_t>> merged;
 	merged.reserve(hits.size());
 	for (const auto& h : hits) {
 		if (!merged.empty() && h.first - merged.back().first < 1.5f)
@@ -149,7 +154,6 @@ bool VisCheck::Trace(const Vector3& from, const Vector3& to, float weaponPen) co
 	}
 
 	constexpr float kNearTarget = 8.f;
-	std::vector<std::pair<float, uint16_t>> block;
 	block.reserve(merged.size());
 	for (const auto& h : merged) {
 		if (h.first < rayLen - kNearTarget)
@@ -198,6 +202,12 @@ bool VisCheck::Visible(const Vector3& from, const Vector3& to, float weaponPen) 
 	const float drop = std::min(36.f, std::max(0.f, from.z - to.z) * 0.45f);
 	const Vector3 flat = { to.x, to.y, from.z - drop };
 	return Trace(from, flat, weaponPen);
+}
+
+bool VisCheck::CanEngage(const Vector3& from, const Vector3& to, float weaponPen) const {
+	if (Visible(from, to, 0.f))
+		return true;
+	return weaponPen > 0.f && Visible(from, to, weaponPen);
 }
 
 bool VisCheck::RayTriangle(const Vector3& origin, const Vector3& dir, const TriangleCombined& tri, float& t) {

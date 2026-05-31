@@ -22,6 +22,7 @@ public:
 	bool IsReady() const { return root_ != nullptr; }
 	size_t TriangleCount() const { return triCount_; }
 	bool Visible(const Vector3& from, const Vector3& to, float weaponPen) const;
+	bool CanEngage(const Vector3& from, const Vector3& to, float weaponPen) const;
 
 private:
 	std::unique_ptr<BVHNode> root_;

@@ -2,84 +2,116 @@
 
 #include <cstring>
 
-#include "core/engine/Engine.hpp" // Circular dep
+#include "config/Current.hpp"
+#include "core/engine/Engine.hpp"
 #include "core/offsets/Dumper.hpp"
 #include "core/vischeck/VisCheckManager.h"
 
-bool Cache::Refresh() {
-    return Get().RefreshImpl();
+std::shared_ptr<const Snapshot> Cache::GetSnapshot() {
+	return Get().published_.load(std::memory_order_acquire);
 }
 
-Snapshot Cache::CopySnapshot() {
-    std::lock_guard<std::mutex> lock(Get().mtx);
-    return {
-        Get().game,
-        Get().bomb,
-        Get().local,
-        Get().globals,
-        Get().players
-    };
+bool Cache::Refresh() {
+	return Get().RefreshImpl();
+}
+
+void Cache::CopySpottedFlags(const Snapshot& prev, std::vector<Player>& players) {
+	for (auto& p : players) {
+		for (const auto& op : prev.players) {
+			if (op.index == p.index) {
+				p.spotted_can_engage = op.spotted_can_engage;
+				break;
+			}
+		}
+	}
+}
+
+void Cache::CopyBoneData(const Snapshot& prev, std::vector<Player>& players) {
+	for (auto& p : players) {
+		if (!p.alive)
+			continue;
+		for (const auto& op : prev.players) {
+			if (op.index == p.index) {
+				p.bone_list = op.bone_list;
+				break;
+			}
+		}
+	}
 }
 
 bool Cache::RefreshImpl() {
-    auto p = Engine::GetProcess();
-    auto client = Engine::GetClient();
+	auto p = Engine::GetProcess();
+	if (!p)
+		return false;
 
-    if (!p)
-        return false;
-
-    auto now = steady_clock::now();
-
-    // Without this, we are pointless :c
-    // Its just calling game.UpdateMatrix() which has to bee updated as fast as possible
-    if (!game.Update())
-        return false;
+	const auto now = steady_clock::now();
 
 #ifdef _DEBUG
-    // Testing performance
-    if (now - last < (cfg::dev::cache_refresh_rate * 1ms)) 
-        return true;
+	const auto refresh_interval = cfg::dev::cache_refresh_rate * 1ms;
 #else
-    // Just refresh every 5ms good for most people
-    if (now - last < 5ms) 
-        return true; // All good
+	constexpr auto refresh_interval = 5ms;
 #endif
 
-    game.UpdateEntityList();
-    char prev_map[sizeof(globals.map_name)]{};
-    std::memcpy(prev_map, globals.map_name, sizeof(prev_map));
-    globals.Update();
-    if (std::strncmp(globals.map_name, prev_map, sizeof(globals.map_name)) != 0)
-        VisCheckManager::OnMapChanged(globals.map_name);
-    bomb.Update();
+	if (now - last < refresh_interval)
+		return true;
 
-    std::vector<Player> scan;
-    scan.reserve(globals.max_clients);
-    for (int i = 0; i < globals.max_clients; i++) {
-        auto player = Player(i, game.entity_list, game.list_entry);
+	constexpr auto bone_interval = 20ms;
+	refresh_bones_ = now - last_bones_ >= bone_interval;
+	if (refresh_bones_)
+		last_bones_ = now;
 
-        if (!player.Update())
-            continue;
+	const auto prev = published_.load(std::memory_order_acquire);
 
-        if (player.localplayer)
-            this->local = player;
+	if (!game.Update())
+		return false;
 
-        // TODO: Handle or at least alert, in case of multiple lp
-        //if (player.localplayer && (this->local.index == -1 || this->local.index == player.index))
-        //    this->local = player;
-        //else if (player.localplayer)
-        //    LOGF(FATAL, "Offset missmatch, initial({}) current({}) there are more than one local players, update needed", this->local.index, player.index);
-    
-        scan.push_back(player);
-    }
+	game.UpdateEntityList();
+	char prev_map[sizeof(globals.map_name)]{};
+	std::memcpy(prev_map, globals.map_name, sizeof(prev_map));
+	globals.Update();
+	if (std::strncmp(globals.map_name, prev_map, sizeof(globals.map_name)) != 0)
+		VisCheckManager::OnMapChanged(globals.map_name);
+	bomb.Update();
 
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        players = std::move(scan);
+	std::vector<Player> scan;
+	scan.reserve(globals.max_clients);
+	for (int i = 0; i < globals.max_clients; i++) {
+		auto player = Player(i, game.entity_list, game.list_entry);
 
-        duration = duration_cast<std::chrono::milliseconds>(last - now);
-        last = now;
-    }
+		if (!player.Update())
+			continue;
 
-    return true;
+		if (player.localplayer)
+			this->local = player;
+
+		scan.push_back(player);
+	}
+
+	if (!refresh_bones_ && prev)
+		CopyBoneData(*prev, scan);
+
+	const bool spotted_on = cfg::esp::spotted::box || cfg::esp::spotted::skeleton
+		|| cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
+	constexpr auto spotted_interval = 50ms;
+
+	if (spotted_on && now - last_spotted_ >= spotted_interval) {
+		VisCheckManager::UpdateSpotted(local, scan);
+		last_spotted_ = now;
+	} else if (prev)
+		CopySpottedFlags(*prev, scan);
+
+	auto snap = std::make_shared<Snapshot>();
+	snap->game = game;
+	snap->bomb = bomb;
+	snap->local = local;
+	snap->globals = globals;
+	snap->players = std::move(scan);
+
+	players = snap->players;
+	published_.store(snap, std::memory_order_release);
+
+	duration = duration_cast<milliseconds>(now - last);
+	last = now;
+
+	return true;
 }

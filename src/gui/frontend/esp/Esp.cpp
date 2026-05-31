@@ -1,9 +1,6 @@
 #include "Esp.hpp"
 
-#include "core/vischeck/VisCheckManager.h"
 #include "gui/renderer/Renderer.hpp"
-
-#include <array>
 
 bool Esp::Init() {
 	return GetInstance().InitImpl();
@@ -43,12 +40,7 @@ void Esp::RenderImpl(const Snapshot& snapshot) {
 	RenderBomb(local, bomb);
 
 	const bool any_spotted = cfg::esp::spotted::box || cfg::esp::spotted::skeleton || cfg::esp::spotted::head_tracker || cfg::esp::spotted::head_tracker_eye_line;
-	const Vec3_t eye = local.pos + Vec3_t(0.f, 0.f, local.view_offset_z);
-	const bool visReady = any_spotted && VisCheckManager::IsReady();
 	static uint8_t visHold[64]{};
-
-	const float weaponPen = local.weapon.penetration;
-	static constexpr std::array kSpottedBones{ bone_index::head, bone_index::neck, bone_index::chest };
 
 	for (auto& player : players) {
 		if (!player.alive)
@@ -72,23 +64,9 @@ void Esp::RenderImpl(const Snapshot& snapshot) {
 			continue;
 
 		bool visible = false;
-		if (visReady && player.bone_list.size() > bone_index::head) {
-			const auto& bones = player.bone_list;
-			bool canEngage = false;
-			for (const auto idx : kSpottedBones) {
-				if (bones.size() <= idx)
-					continue;
-				const auto& pos = bones[idx].pos;
-				const bool los = VisCheckManager::IsVisible(eye, pos, 0.f);
-				const bool pen = !los && weaponPen > 0.f && VisCheckManager::IsVisible(eye, pos, weaponPen);
-				if (los || pen) {
-					canEngage = true;
-					break;
-				}
-			}
-
+		if (any_spotted) {
 			auto& visibilityHold = visHold[player.index & 63];
-			if (canEngage)
+			if (player.spotted_can_engage)
 				visibilityHold = 6;
 			else if (visibilityHold)
 				--visibilityHold;

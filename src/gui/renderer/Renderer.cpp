@@ -86,10 +86,10 @@ void Renderer::ThreadImpl() {
 void Renderer::Render() {
     Window::StartRender();
 
-    const auto snapshot = Cache::CopySnapshot();
-
-    Esp::Render(snapshot);
-    Overlays::Render(snapshot);
+    if (const auto snapshot = Cache::GetSnapshot()) {
+        Esp::Render(*snapshot);
+        Overlays::Render(*snapshot);
+    }
 
     Menu::RenderStartupHelp();
     if (isOpen) Menu::Render();

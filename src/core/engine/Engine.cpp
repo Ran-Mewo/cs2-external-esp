@@ -54,19 +54,18 @@ bool Engine::InitImpl() {
 }
 
 void Engine::Thread() {
-    // TODO: Check build number 
-    // uintptr_t number = process->read<uintptr_t>(base_engine.base + offsets::buildNumber);
-
     while (true) {
         auto start = steady_clock::now();
 
         Cache::Refresh();
 
-        if (cfg::triggerbot::enabled && Triggerbot::IsHeld())
-            Triggerbot::Tick(Cache::CopySnapshot());
+        if (const auto snap = Cache::GetSnapshot()) {
+            if (cfg::triggerbot::enabled && Triggerbot::IsHeld())
+                Triggerbot::Tick(*snap);
 
-        if (cfg::rcs::enabled && Recoil::IsShooting())
-            Recoil::Tick(Cache::CopySnapshot());
+            if (cfg::rcs::enabled && Recoil::IsShooting())
+                Recoil::Tick(*snap);
+        }
 
         if (cfg::settings::free_cpu)
             std::this_thread::sleep_until(start + 1ms);

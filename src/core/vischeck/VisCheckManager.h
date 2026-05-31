@@ -3,17 +3,21 @@
 #include "VisCheck.h"
 #include "core/engine/types/Vec3.hpp"
 
+class Player;
+
 #include <atomic>
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <thread>
+#include <vector>
 
 class VisCheckManager {
 public:
     static void OnMapChanged(const char* mapName);
     static bool IsReady();
     static bool IsVisible(const Vec3_t& from, const Vec3_t& to, float weaponPen = 0.f);
+    static void UpdateSpotted(const Player& local, std::vector<Player>& players);
 
 private:
     static VisCheckManager& Get();

@@ -31,6 +31,7 @@ public:
     bool flashed = false;
     bool defusing = false;
     bool localplayer = false;
+    bool spotted_can_engage = false;
 
     int32_t crosshair_ent_index = -1;
     uintptr_t pawn_addr = 0;
