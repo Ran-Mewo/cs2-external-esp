@@ -9,7 +9,6 @@
 
 namespace {
 	constexpr auto kDropTarget = 450ms;
-	constexpr auto kAimInterval = 6ms;
 	constexpr float kPxToMouse = 0.22f;
 	constexpr float kFlickMaxPx = 120.f;
 	constexpr float kTrackMaxPx = 240.f;
@@ -42,6 +41,11 @@ namespace {
 
 	int ReactionMs() {
 		return RandMs(55, 115);
+	}
+
+	// Snipers lose first-shot accuracy while the view is moving, so we never auto-aim them.
+	bool IsSniper(short id) {
+		return id == weapon_awp || id == weapon_ssg08 || id == weapon_scar20 || id == weapon_g3sg1;
 	}
 
 	uintptr_t ResolveEnt(uintptr_t entity_list, int32_t ent_index) {
@@ -140,22 +144,28 @@ namespace {
 		if (dist < 1.5f || dist > max_px)
 			return;
 
-		const float t = (tracking ? 0.38f : 0.55f) * RandF(0.95f, 1.05f);
-		px *= t * kPxToMouse;
-		py *= t * kPxToMouse;
+		const float t = (tracking ? 0.38f : 0.55f) * RandF(0.9f, 1.1f);
+		float mx = px * t * kPxToMouse;
+		float my = py * t * kPxToMouse;
+
+		// Bias each step sideways so the path arcs and trembles instead of snapping dead-straight.
+		const float curve = RandF(-0.18f, 0.18f);
+		const float bx = mx, by = my;
+		mx -= by * curve;
+		my += bx * curve;
 
 		const float cap = tracking ? 14.f : 10.f;
-		if (const float mag = std::hypot(px, py); mag > cap) {
-			px *= cap / mag;
-			py *= cap / mag;
+		if (const float mag = std::hypot(mx, my); mag > cap) {
+			mx *= cap / mag;
+			my *= cap / mag;
 		}
 
-		int dx = (int)std::lround(px);
-		int dy = (int)std::lround(py);
-		if (!dx && std::abs(px) >= 1.f)
-			dx = px > 0.f ? 1 : -1;
-		if (!dy && std::abs(py) >= 1.f)
-			dy = py > 0.f ? 1 : -1;
+		int dx = (int)std::lround(mx);
+		int dy = (int)std::lround(my);
+		if (!dx && std::abs(mx) >= 1.f)
+			dx = mx > 0.f ? 1 : -1;
+		if (!dy && std::abs(my) >= 1.f)
+			dy = my > 0.f ? 1 : -1;
 		if (!dx && !dy)
 			return;
 
@@ -174,11 +184,11 @@ namespace {
 
 void Triggerbot::Tick(const Snapshot& snap) {
 	static uintptr_t locked_pawn = 0;
-	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{}, last_aim{};
+	static steady_clock::time_point ready_at{}, next_shot{}, miss_since{}, next_aim{};
 
 	auto reset = [&] {
 		locked_pawn = 0;
-		ready_at = next_shot = miss_since = last_aim = {};
+		ready_at = next_shot = miss_since = next_aim = {};
 	};
 
 	if (!cfg::enabled || !cfg::triggerbot::enabled || !SideButtonHeld()) {
@@ -224,9 +234,9 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	const Player* track = FindPlayer(snap, locked_pawn);
 	const bool on_crosshair = crosshair.pawn == locked_pawn;
 
-	if (cfg::triggerbot::soft_aim && now - last_aim >= kAimInterval) {
+	if (cfg::triggerbot::soft_aim && !IsSniper(snap.local.weapon.item_index) && now >= next_aim) {
 		SoftAim(snap.game.view_matrix, ScreenSize(proc->hwnd_), AimPos(proc, track, locked_pawn), !on_crosshair);
-		last_aim = now;
+		next_aim = now + milliseconds(RandMs(5, 10));
 	}
 
 	if (!on_crosshair || now < ready_at || now < next_shot)
