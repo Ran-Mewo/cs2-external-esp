@@ -158,7 +158,7 @@ void Triggerbot::Tick(const Snapshot& snap) {
 	if (crosshair.pawn) {
 		if (crosshair.pawn != locked) {
 			locked = crosshair.pawn;
-			ready_at = now + milliseconds(RandI(55, 115));
+			ready_at = now + milliseconds(RandI(55, 100));
 		}
 		miss_since = {};
 	} else if (locked) {
